@@ -1,0 +1,20 @@
+{
+  "model_size": "base",
+  "language": "en",
+  "hotkey_dictation": "f9",
+  "hotkey_command": "f10",
+  "hotkey_mode": "hold",
+  "mic_device": null,
+  "sound_effects": true,
+  "notifications": true,
+  "noise_reduction": false,
+  "post_processing": {
+    "remove_filler_words": true,
+    "code_vocabulary": false,
+    "auto_capitalize": true
+  },
+  "vad": {
+    "enabled": true,
+    "silence_timeout_ms": 1500
+  }
+}
