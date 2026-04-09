@@ -25,9 +25,11 @@ from PIL import Image, ImageDraw
 from config import load_config, save_config, open_config_file
 from text_processing import process_text, apply_custom_vocabulary
 from history import init_db, save_transcription
+from overlay import KodaOverlay
+from profiles import ProfileMonitor
 
 # --- Version ---
-VERSION = "2.0.0"
+VERSION = "3.0.0"
 
 # --- Globals ---
 recording = False
@@ -44,6 +46,9 @@ wake_word_active = False
 wake_word_thread = None
 wake_buffer = []  # rolling buffer for wake word detection
 wake_buffer_lock = threading.Lock()
+overlay = None  # Floating status overlay
+profile_monitor = None  # Per-app profile switcher
+base_config = {}  # Original config before profile overrides
 
 
 # ============================================================
@@ -121,10 +126,33 @@ def play_wakeword_sound():
 # TRAY
 # ============================================================
 
+# Map tray colors to overlay states
+_COLOR_TO_STATE = {
+    "#2ecc71": "ready",
+    "#e74c3c": "recording",
+    "#f39c12": "transcribing",
+    "#9b59b6": "reading",
+    "#3498db": "listening",
+    "gray": "ready",
+}
+
+
 def update_tray(color, tooltip):
     if tray_icon:
         tray_icon.icon = create_icon(color)
         tray_icon.title = tooltip
+    # Update floating overlay
+    if overlay:
+        state = _COLOR_TO_STATE.get(color, "ready")
+        # Extract preview text from tooltip if it has one
+        preview = ""
+        if ": " in tooltip:
+            preview_part = tooltip.split(": ", 1)[1]
+            if preview_part not in ("Ready", "Loading model...", "Transcribing...",
+                                     "Recording (Dictation)...", "Recording (Command)...",
+                                     "Listening...", "Reading..."):
+                preview = preview_part
+        overlay.set_state(state, preview)
 
 
 def notify(message, title="Koda"):
@@ -358,9 +386,11 @@ def _streaming_thread():
             text = " ".join(seg.text for seg in segments).strip()
             if text:
                 streaming_text = text
-                # Show partial text in tray tooltip
+                # Show partial text in tray tooltip and overlay
                 preview = text[:80] + "..." if len(text) > 80 else text
                 update_tray("#e74c3c", f"Koda: {preview}")
+                if overlay:
+                    overlay.set_preview(text)
         except Exception:
             pass
 
@@ -744,6 +774,11 @@ def build_menu():
             checked=lambda item: config.get("post_processing", {}).get("code_vocabulary", False),
         ),
         pystray.MenuItem(
+            "Auto-format (numbers, dates)",
+            toggle_post_processing("auto_format"),
+            checked=lambda item: config.get("post_processing", {}).get("auto_format", True),
+        ),
+        pystray.MenuItem(
             "Noise reduction",
             toggle_setting("noise_reduction"),
             checked=lambda item: config.get("noise_reduction", False),
@@ -775,7 +810,19 @@ def build_menu():
             "Switch to Toggle mode" if mode == "hold" else "Switch to Hold mode",
             switch_mode,
         ),
+        pystray.MenuItem(
+            f"Per-app profiles{' (' + profile_monitor.current_profile + ')' if profile_monitor and profile_monitor.current_profile else ''}",
+            toggle_profiles,
+            checked=lambda item: config.get("profiles_enabled", True),
+        ),
+        pystray.MenuItem(
+            "Floating overlay",
+            toggle_overlay,
+            checked=lambda item: overlay is not None and overlay.is_visible,
+        ),
+        pystray.MenuItem("Transcribe audio file", lambda icon, item: _open_transcribe_file()),
         pystray.MenuItem("Edit custom words", lambda icon, item: _open_custom_words()),
+        pystray.MenuItem("Edit app profiles", lambda icon, item: _open_profiles()),
         pystray.MenuItem("Settings window", lambda icon, item: _open_settings_gui()),
         pystray.MenuItem("Open config file", lambda icon, item: open_config_file()),
         pystray.Menu.SEPARATOR,
@@ -886,6 +933,41 @@ def toggle_output_mode(icon, item):
     icon.menu = build_menu()
 
 
+def _on_profile_change(profile_name, merged_config):
+    """Called when the active window changes to a different profile."""
+    global config
+    if profile_name:
+        config = merged_config
+        notify(f"Profile: {profile_name}")
+        if overlay:
+            overlay.set_state("ready", f"Profile: {profile_name}")
+    else:
+        config = base_config.copy()
+
+
+def toggle_profiles(icon, item):
+    global profile_monitor
+    if config.get("profiles_enabled", True):
+        config["profiles_enabled"] = False
+        if profile_monitor:
+            profile_monitor.stop()
+            profile_monitor = None
+    else:
+        config["profiles_enabled"] = True
+        profile_monitor = ProfileMonitor(base_config, on_profile_change=_on_profile_change)
+        profile_monitor.start()
+    save_config(config)
+    icon.menu = build_menu()
+
+
+def toggle_overlay(icon, item):
+    if overlay:
+        overlay.toggle_visible()
+        config["overlay_enabled"] = overlay.is_visible
+        save_config(config)
+        icon.menu = build_menu()
+
+
 def _open_custom_words():
     """Open custom_words.json in the default editor."""
     custom_words_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_words.json")
@@ -894,6 +976,20 @@ def _open_custom_words():
         with open(custom_words_path, "w", encoding="utf-8") as f:
             json.dump({"coda": "Koda", "claude code": "Claude Code"}, f, indent=2)
     os.startfile(custom_words_path)
+
+
+def _open_transcribe_file():
+    """Open the audio file transcription window."""
+    from transcribe_file import TranscribeFileWindow
+    win = TranscribeFileWindow(model, config)
+    win.show()
+
+
+def _open_profiles():
+    """Open profiles.json in the default editor."""
+    from profiles import load_profiles, PROFILES_PATH
+    load_profiles()  # Ensure file exists
+    os.startfile(PROFILES_PATH)
 
 
 def switch_mode(icon, item):
@@ -913,6 +1009,10 @@ def on_quit(icon, item):
     global stream, wake_word_active
     wake_word_active = False
     keyboard.unhook_all()
+    if profile_monitor:
+        profile_monitor.stop()
+    if overlay:
+        overlay.stop()
     if stream:
         stream.stop()
         stream.close()
@@ -920,9 +1020,21 @@ def on_quit(icon, item):
 
 
 def run_setup():
-    global stream
+    global stream, overlay, profile_monitor, base_config
 
     update_tray("gray", "Koda: Loading model...")
+
+    # Start floating overlay (if enabled — default on)
+    if config.get("overlay_enabled", True):
+        overlay = KodaOverlay()
+        overlay.start()
+
+    # Start per-app profile monitor
+    base_config = config.copy()
+    if config.get("profiles_enabled", True):
+        profile_monitor = ProfileMonitor(base_config, on_profile_change=_on_profile_change)
+        profile_monitor.start()
+
     load_whisper_model()
     init_vad()
     init_tts()

@@ -127,7 +127,10 @@ class KodaSettings(tk.Tk):
         cw_frame = ttk.Frame(main)
         cw_frame.pack(fill="x", pady=2)
         ttk.Label(cw_frame, text="Replace misheard words with correct versions:").pack(anchor="w")
-        ttk.Button(cw_frame, text="Edit custom_words.json", command=self._open_custom_words).pack(anchor="w", pady=(5, 0))
+        btn_row = ttk.Frame(cw_frame)
+        btn_row.pack(anchor="w", pady=(5, 0))
+        ttk.Button(btn_row, text="Edit custom_words.json", command=self._open_custom_words).pack(side="left", padx=(0, 10))
+        ttk.Button(btn_row, text="Edit profiles.json", command=self._open_profiles).pack(side="left")
 
         # --- Toggles ---
         ttk.Label(main, text="FEATURES", style="Header.TLabel").pack(anchor="w", pady=(15, 5))
@@ -146,6 +149,15 @@ class KodaSettings(tk.Tk):
 
         self.code_var = tk.BooleanVar(value=self.config_data.get("post_processing", {}).get("code_vocabulary", False))
         ttk.Checkbutton(main, text="Code vocabulary (open paren → ( in command mode)", variable=self.code_var).pack(anchor="w")
+
+        self.autoformat_var = tk.BooleanVar(value=self.config_data.get("post_processing", {}).get("auto_format", True))
+        ttk.Checkbutton(main, text="Auto-format (numbers, dates, smart punctuation)", variable=self.autoformat_var).pack(anchor="w")
+
+        self.overlay_var = tk.BooleanVar(value=self.config_data.get("overlay_enabled", True))
+        ttk.Checkbutton(main, text="Floating status overlay (live recording preview)", variable=self.overlay_var).pack(anchor="w")
+
+        self.profiles_var = tk.BooleanVar(value=self.config_data.get("profiles_enabled", True))
+        ttk.Checkbutton(main, text="Per-app profiles (auto-switch settings by active window)", variable=self.profiles_var).pack(anchor="w")
 
         # --- Read-back voice ---
         ttk.Label(main, text="READ-BACK", style="Header.TLabel").pack(anchor="w", pady=(15, 5))
@@ -209,10 +221,13 @@ class KodaSettings(tk.Tk):
         cfg["sound_effects"] = self.sound_var.get()
         cfg["noise_reduction"] = self.noise_var.get()
         cfg["streaming"] = self.stream_var.get()
+        cfg["overlay_enabled"] = self.overlay_var.get()
+        cfg["profiles_enabled"] = self.profiles_var.get()
 
         pp = cfg.setdefault("post_processing", {})
         pp["remove_filler_words"] = self.filler_var.get()
         pp["code_vocabulary"] = self.code_var.get()
+        pp["auto_format"] = self.autoformat_var.get()
 
         tts = cfg.setdefault("tts", {})
         tts["voice"] = self.voice_var.get()
@@ -243,6 +258,14 @@ class KodaSettings(tk.Tk):
             with open(custom_words_path, "w", encoding="utf-8") as f:
                 json.dump({"coda": "Koda", "claude code": "Claude Code"}, f, indent=2)
         os.startfile(custom_words_path)
+
+    def _open_profiles(self):
+        """Open profiles.json in the default editor."""
+        profiles_path = os.path.join(SCRIPT_DIR, "profiles.json")
+        if not os.path.exists(profiles_path):
+            from profiles import load_profiles
+            load_profiles()  # Creates default file
+        os.startfile(profiles_path)
 
     def _open_history(self):
         """Open a simple history viewer window."""

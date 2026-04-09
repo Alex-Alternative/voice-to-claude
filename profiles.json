@@ -1,0 +1,53 @@
+{
+  "_description": "Per-app profiles. Each key is a profile name. 'match' is a process name or regex for window title. 'settings' are config overrides merged on top of your base config.",
+  "VS Code": {
+    "match": {
+      "process": "code.exe"
+    },
+    "settings": {
+      "post_processing": {
+        "code_vocabulary": true,
+        "auto_format": false
+      }
+    }
+  },
+  "Terminal": {
+    "match": {
+      "process": "windowsterminal.exe"
+    },
+    "settings": {
+      "post_processing": {
+        "code_vocabulary": true,
+        "auto_format": false
+      }
+    }
+  },
+  "Slack": {
+    "match": {
+      "process": "slack.exe"
+    },
+    "settings": {
+      "post_processing": {
+        "code_vocabulary": false,
+        "remove_filler_words": true
+      }
+    }
+  },
+  "Outlook": {
+    "match": {
+      "process": "outlook.exe"
+    },
+    "settings": {
+      "post_processing": {
+        "code_vocabulary": false,
+        "auto_capitalize": true
+      }
+    }
+  },
+  "Notepad": {
+    "match": {
+      "process": "notepad.exe"
+    },
+    "settings": {}
+  }
+}

@@ -4,8 +4,10 @@
   "hotkey_dictation": "ctrl+space",
   "hotkey_command": "ctrl+shift+.",
   "hotkey_correction": "ctrl+shift+z",
+  "hotkey_readback": "ctrl+shift+r",
+  "hotkey_readback_selected": "ctrl+shift+t",
   "hotkey_mode": "hold",
-  "mic_device": 0,
+  "mic_device": null,
   "sound_effects": true,
   "notifications": false,
   "noise_reduction": false,
@@ -16,14 +18,14 @@
   },
   "vad": {
     "enabled": true,
-    "silence_timeout_ms": 1500
+    "silence_timeout_ms": 1000
   },
   "wake_word": {
-    "enabled": true,
+    "enabled": false,
     "phrase": "hey koda"
   },
   "llm_polish": {
-    "enabled": true,
+    "enabled": false,
     "model": "phi3:mini"
   }
 }

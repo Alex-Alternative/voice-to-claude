@@ -28,6 +28,7 @@ DEFAULT_CONFIG = {
         "remove_filler_words": True,
         "code_vocabulary": False,
         "auto_capitalize": True,
+        "auto_format": True,
     },
     "vad": {
         "enabled": True,
@@ -45,6 +46,8 @@ DEFAULT_CONFIG = {
         "rate": "normal",
         "voice": "",
     },
+    "overlay_enabled": True,
+    "profiles_enabled": True,
 }
 
 
