@@ -430,6 +430,77 @@ def format_smart_punctuation(text):
     return text
 
 
+# --- Auto-Formatting: Email & URL ---
+
+_TLDS = {
+    "com", "org", "net", "edu", "gov", "io", "co", "uk", "us", "ca", "de",
+    "fr", "es", "it", "nl", "au", "jp", "br", "in", "ru", "app", "dev",
+    "ai", "me", "info", "biz", "xyz",
+}
+
+
+def format_spoken_emails(text):
+    """Convert spoken email addresses to proper format.
+
+    "alex at altfunding dot com" → "alex@altfunding.com"
+    "info at company dot co dot uk" → "info@company.co.uk"
+    "john dot doe at gmail dot com" → "john.doe@gmail.com"
+    Only triggers when the pattern ends with a known TLD after "dot".
+    """
+    words = text.split()
+    result = []
+    i = 0
+
+    while i < len(words):
+        # Look for "at" that could be part of an email
+        if words[i].lower() == "at" and i > 0 and i + 2 < len(words):
+            # Scan forward for "dot tld" pattern
+            domain_parts = []
+            j = i + 1
+            while j < len(words):
+                domain_parts.append(words[j])
+                # Check if next is "dot" + word
+                if j + 2 <= len(words) - 1 and words[j + 1].lower() == "dot":
+                    domain_parts.append(words[j + 1])
+                    j += 2
+                else:
+                    break
+
+            # Check if we have a valid email pattern: at least "domain dot tld"
+            # and the last word after a "dot" is a known TLD
+            dot_count = sum(1 for p in domain_parts if p.lower() == "dot")
+            last_word = domain_parts[-1].lower().rstrip(".,!?;:") if domain_parts else ""
+
+            if dot_count >= 1 and last_word in _TLDS:
+                # Build local part (look back for "word dot word" patterns)
+                local_parts = [result.pop()]
+                while result and len(result) >= 2 and result[-1].lower() == "dot":
+                    result.pop()  # remove "dot"
+                    local_parts.insert(0, result.pop())  # remove word before dot
+
+                local = ".".join(local_parts)
+
+                # Build domain
+                domain = ".".join(
+                    p for p in domain_parts if p.lower() != "dot"
+                )
+
+                # Preserve trailing punctuation
+                trailing = ""
+                if domain and domain[-1] in ".,!?;:":
+                    trailing = domain[-1]
+                    domain = domain[:-1]
+
+                result.append(f"{local}@{domain}{trailing}")
+                i = j + 1
+                continue
+
+        result.append(words[i])
+        i += 1
+
+    return " ".join(result)
+
+
 # --- Processing Pipeline ---
 
 def process_text(text, config):
@@ -447,6 +518,7 @@ def process_text(text, config):
     # Auto-formatting runs before filler removal so "dot dot dot" → "..." isn't
     # eaten by the stutter remover, and dates/numbers are parsed from clean speech
     if pp.get("auto_format", True):
+        text = format_spoken_emails(text)
         text = format_smart_punctuation(text)
         text = format_spoken_dates(text)
         text = format_spoken_numbers(text)
