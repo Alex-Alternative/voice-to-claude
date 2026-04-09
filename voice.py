@@ -96,8 +96,10 @@ def play_error_sound():
 
 
 def play_wakeword_sound():
+    """Distinct beep pattern — wake word confirmed. Uses system beep so it's always audible."""
     if config.get("sound_effects", True):
-        _play_wav("start.wav")
+        winsound.Beep(500, 120)
+        winsound.Beep(600, 120)
 
 
 # ============================================================
@@ -122,17 +124,11 @@ def notify(message, title="Koda"):
 # MODEL
 # ============================================================
 
-wake_model = None  # Separate tiny model for wake word detection
-
-
 def load_whisper_model():
-    global model, wake_model
+    global model
     from faster_whisper import WhisperModel
     model_size = config.get("model_size", "base")
     model = WhisperModel(model_size, device="cpu", compute_type="int8")
-    # Load tiny model for fast wake word detection
-    if config.get("wake_word", {}).get("enabled", False):
-        wake_model = WhisperModel("tiny", device="cpu", compute_type="int8")
 
 
 # ============================================================
@@ -198,9 +194,9 @@ def check_vad_silence(audio_chunk):
     return rms > 0.01
 
 
-def vad_monitor_thread():
+def vad_monitor_thread(silence_override=None):
     global recording, last_speech_time
-    silence_timeout = config.get("vad", {}).get("silence_timeout_ms", 1500) / 1000.0
+    silence_timeout = (silence_override or config.get("vad", {}).get("silence_timeout_ms", 1500)) / 1000.0
     while recording:
         time.sleep(0.1)
         if not audio_chunks:
@@ -214,17 +210,28 @@ def vad_monitor_thread():
 
 
 # ============================================================
-# WAKE WORD ("Hey Koda")
+# WAKE WORD (openwakeword — proper neural network detection)
 # ============================================================
 
+oww_model = None  # openwakeword model
+
+
 def start_wake_word_listener():
-    """Start background thread that listens for 'Hey Koda'."""
-    global wake_word_active, wake_word_thread
+    """Start background thread that listens for the wake word."""
+    global wake_word_active, wake_word_thread, oww_model
     if not config.get("wake_word", {}).get("enabled", False):
         return
-    wake_word_active = True
-    wake_word_thread = threading.Thread(target=_wake_word_loop, daemon=True)
-    wake_word_thread.start()
+    try:
+        from openwakeword.model import Model as OWWModel
+        oww_model = OWWModel(
+            wakeword_models=["alexa_v0.1"],
+            inference_framework="onnx",
+        )
+        wake_word_active = True
+        wake_word_thread = threading.Thread(target=_wake_word_loop, daemon=True)
+        wake_word_thread.start()
+    except Exception:
+        pass
 
 
 def stop_wake_word_listener():
@@ -233,17 +240,16 @@ def stop_wake_word_listener():
 
 
 def _wake_word_loop():
-    """Continuously listen for the wake word using the shared audio buffer."""
+    """Listen for wake word using openwakeword (like Alexa/Siri — dedicated tiny NN)."""
     global wake_word_active
-    wake_phrase = config.get("wake_word", {}).get("phrase", "hey koda").lower()
-    energy_threshold = 0.008
+    threshold = config.get("wake_word", {}).get("threshold", 0.7)
 
     while wake_word_active:
         if recording:
             time.sleep(0.5)
             continue
 
-        # Wait for audio to accumulate
+        # Wait for enough audio to accumulate (~1.5 seconds)
         time.sleep(1.5)
 
         if not wake_word_active or recording:
@@ -256,59 +262,48 @@ def _wake_word_loop():
             audio = np.concatenate(wake_buffer, axis=0).flatten()
             wake_buffer.clear()
 
-        # Skip if too quiet
-        rms = np.sqrt(np.mean(audio ** 2))
-        if rms < energy_threshold:
+        # Only process if there's actual speech (not just background noise)
+        peak = np.max(np.abs(audio))
+        if peak < 0.03:
+            continue
+        # Normalize to ~50% range (not full — avoids amplifying noise into false triggers)
+        audio_normalized = audio / peak * 0.5
+        audio_int16 = (audio_normalized * 32767).astype(np.int16)
+        detected = False
+
+        for i in range(0, len(audio_int16) - 1280, 1280):
+            oww_model.predict(audio_int16[i:i + 1280])
+
+            for name, scores in oww_model.prediction_buffer.items():
+                if len(scores) > 0 and scores[-1] > threshold:
+                    detected = True
+                    break
+            if detected:
+                break
+
+        if not detected:
+            oww_model.reset()
             continue
 
-        # Quick transcription with tiny model + prompt hint
-        try:
-            wm = wake_model if wake_model else model
-            segments, _ = wm.transcribe(
-                audio, beam_size=5, language=config.get("language", "en"),
-                vad_filter=False, initial_prompt="Hey Koda",
-            )
-            text = " ".join(seg.text for seg in segments).strip().lower()
+        # Wake word detected!
+        oww_model.reset()
+        play_wakeword_sound()
+        update_tray("#3498db", "Koda: Listening...")
+        time.sleep(0.5)  # Let the confirmation chime finish before recording beep
 
-            if _matches_wake_phrase(text, wake_phrase):
-                play_wakeword_sound()
-                update_tray("#3498db", "Koda: Listening...")
-                time.sleep(0.5)
-                # Clear buffer before recording so old audio doesn't re-trigger
-                with wake_buffer_lock:
-                    wake_buffer.clear()
-                start_recording("dictation", force_vad=True)
-                # Wait for recording to finish
-                while recording:
-                    time.sleep(0.1)
-                # Cooldown after recording to prevent re-trigger
-                with wake_buffer_lock:
-                    wake_buffer.clear()
-                time.sleep(2)
-        except Exception:
-            pass
+        with wake_buffer_lock:
+            wake_buffer.clear()
 
+        start_recording("dictation", force_vad=True, vad_timeout_ms=800)
 
-def _matches_wake_phrase(text, phrase):
-    """Fuzzy match for wake word. Handles common Whisper mishearings."""
-    text = text.lower().strip().rstrip(".,!?")
-    phrase = phrase.lower().strip()
+        while recording:
+            time.sleep(0.1)
 
-    # Direct match
-    if phrase in text:
-        return True
-
-    # Common Whisper mishearings of "hey koda"
-    variants = [
-        "hey koda", "hey coda", "hey coder", "hey kota",
-        "a koda", "a coda", "hey koba", "hey coba",
-        "hey code a", "hey ko da",
-    ]
-    for variant in variants:
-        if variant in text:
-            return True
-
-    return False
+        # Cooldown
+        with wake_buffer_lock:
+            wake_buffer.clear()
+        oww_model.reset()
+        time.sleep(2)
 
 
 # ============================================================
@@ -328,7 +323,7 @@ def audio_callback(indata, frames, time_info, status):
                 wake_buffer.pop(0)
 
 
-def start_recording(mode="dictation", force_vad=False):
+def start_recording(mode="dictation", force_vad=False, vad_timeout_ms=None):
     global recording, audio_chunks, last_speech_time, recording_mode
     if recording:
         return
@@ -343,7 +338,7 @@ def start_recording(mode="dictation", force_vad=False):
 
     # Use VAD auto-stop in toggle mode OR when triggered by wake word
     if force_vad or config.get("hotkey_mode", "hold") == "toggle":
-        threading.Thread(target=vad_monitor_thread, daemon=True).start()
+        threading.Thread(target=vad_monitor_thread, args=(vad_timeout_ms,), daemon=True).start()
 
 
 def stop_recording():
@@ -432,6 +427,98 @@ def undo_and_rerecord():
 
 
 # ============================================================
+# READ-BACK (Text-to-Speech)
+# ============================================================
+
+tts_engine = None
+tts_speaking = False
+
+
+def init_tts():
+    """Initialize the text-to-speech engine."""
+    global tts_engine
+    try:
+        import pyttsx3
+        tts_engine = pyttsx3.init()
+        # Slightly slower rate for clarity
+        tts_engine.setProperty('rate', 160)
+    except Exception:
+        tts_engine = None
+
+
+def read_back():
+    """Read aloud the last transcription or whatever is on the clipboard."""
+    global tts_speaking
+    if not tts_engine:
+        return
+
+    if tts_speaking:
+        # If already speaking, stop
+        tts_engine.stop()
+        tts_speaking = False
+        update_tray("#2ecc71", "Koda: Ready")
+        return
+
+    # Try last transcription first, fall back to clipboard
+    text = last_transcription or pyperclip.paste()
+    if not text:
+        return
+
+    tts_speaking = True
+    update_tray("#9b59b6", "Koda: Reading...")
+
+    def _speak():
+        global tts_speaking
+        try:
+            tts_engine.say(text)
+            tts_engine.runAndWait()
+        except Exception:
+            pass
+        tts_speaking = False
+        update_tray("#2ecc71", "Koda: Ready")
+
+    threading.Thread(target=_speak, daemon=True).start()
+
+
+def read_selected():
+    """Read aloud whatever text is currently selected on screen."""
+    global tts_speaking
+    if not tts_engine:
+        return
+
+    if tts_speaking:
+        tts_engine.stop()
+        tts_speaking = False
+        update_tray("#2ecc71", "Koda: Ready")
+        return
+
+    # Copy selected text
+    original = pyperclip.paste()
+    pyautogui.hotkey("ctrl", "c")
+    time.sleep(0.2)
+    text = pyperclip.paste()
+    pyperclip.copy(original)  # restore clipboard
+
+    if not text:
+        return
+
+    tts_speaking = True
+    update_tray("#9b59b6", "Koda: Reading...")
+
+    def _speak():
+        global tts_speaking
+        try:
+            tts_engine.say(text)
+            tts_engine.runAndWait()
+        except Exception:
+            pass
+        tts_speaking = False
+        update_tray("#2ecc71", "Koda: Ready")
+
+    threading.Thread(target=_speak, daemon=True).start()
+
+
+# ============================================================
 # HOTKEYS
 # ============================================================
 
@@ -487,6 +574,14 @@ def setup_hotkeys():
     _register_hotkey(hotkey_correct, on_press=lambda: threading.Thread(
         target=undo_and_rerecord, daemon=True).start())
 
+    # Read-back hotkeys
+    hotkey_read = config.get("hotkey_readback", "ctrl+shift+r")
+    hotkey_read_sel = config.get("hotkey_readback_selected", "ctrl+shift+t")
+    _register_hotkey(hotkey_read, on_press=lambda: threading.Thread(
+        target=read_back, daemon=True).start())
+    _register_hotkey(hotkey_read_sel, on_press=lambda: threading.Thread(
+        target=read_selected, daemon=True).start())
+
 
 # ============================================================
 # TRAY MENU
@@ -496,6 +591,8 @@ def build_menu():
     hotkey_dict = config.get("hotkey_dictation", "ctrl+space").upper()
     hotkey_cmd = config.get("hotkey_command", "ctrl+shift+.").upper()
     hotkey_corr = config.get("hotkey_correction", "ctrl+shift+z").upper()
+    hotkey_read = config.get("hotkey_readback", "ctrl+shift+r").upper()
+    hotkey_read_sel = config.get("hotkey_readback_selected", "ctrl+shift+t").upper()
     mode = config.get("hotkey_mode", "hold")
     mode_label = "Hold-to-talk" if mode == "hold" else "Toggle (auto-stop)"
     wake_enabled = config.get("wake_word", {}).get("enabled", False)
@@ -503,7 +600,8 @@ def build_menu():
     return pystray.Menu(
         pystray.MenuItem(f"Koda v{VERSION}", None, enabled=False),
         pystray.MenuItem(f"{hotkey_dict} = Dictation  |  {hotkey_cmd} = Command", None, enabled=False),
-        pystray.MenuItem(f"{hotkey_corr} = Redo  |  Mode: {mode_label}", None, enabled=False),
+        pystray.MenuItem(f"{hotkey_corr} = Redo  |  {hotkey_read} = Read back", None, enabled=False),
+        pystray.MenuItem(f"{hotkey_read_sel} = Read selected  |  Mode: {mode_label}", None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(
             "Sound effects",
@@ -610,6 +708,7 @@ def run_setup():
     update_tray("gray", "Koda: Loading model...")
     load_whisper_model()
     init_vad()
+    init_tts()
 
     mic_device = config.get("mic_device")
     stream = sd.InputStream(

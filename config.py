@@ -15,6 +15,8 @@ DEFAULT_CONFIG = {
     "hotkey_dictation": "ctrl+space",
     "hotkey_command": "ctrl+shift+.",
     "hotkey_correction": "ctrl+shift+z",
+    "hotkey_readback": "ctrl+shift+r",
+    "hotkey_readback_selected": "ctrl+shift+t",
     "hotkey_mode": "hold",
     "mic_device": None,
     "sound_effects": True,
