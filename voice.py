@@ -369,14 +369,14 @@ def _transcribe_and_paste():
             except Exception:
                 pass
 
-        # Transcribe
+        # Transcribe — vad_filter OFF for short phrases, beam_size 3 for speed
         language = config.get("language", "en")
-        transcribe_opts = {
-            "beam_size": 5,
-            "language": language,
-            "vad_filter": config.get("vad", {}).get("enabled", True),
-        }
-        segments, info = model.transcribe(audio, **transcribe_opts)
+        segments, info = model.transcribe(
+            audio,
+            beam_size=3,
+            language=language,
+            vad_filter=False,
+        )
         text = " ".join(seg.text for seg in segments).strip()
 
         if not text:
@@ -435,31 +435,36 @@ tts_speaking = False
 
 
 def init_tts():
-    """Initialize the text-to-speech engine."""
+    """Placeholder — TTS is initialized lazily on first use to avoid COM threading issues."""
+    pass
+
+
+def _get_tts():
+    """Get or create TTS engine (lazy init to avoid COM conflicts)."""
     global tts_engine
-    try:
-        import pyttsx3
-        tts_engine = pyttsx3.init()
-        # Slightly slower rate for clarity
-        tts_engine.setProperty('rate', 160)
-    except Exception:
-        tts_engine = None
+    if tts_engine is None:
+        try:
+            import pyttsx3
+            tts_engine = pyttsx3.init()
+            tts_engine.setProperty('rate', 160)
+        except Exception:
+            return None
+    return tts_engine
 
 
 def read_back():
     """Read aloud the last transcription or whatever is on the clipboard."""
     global tts_speaking
-    if not tts_engine:
+    engine = _get_tts()
+    if not engine:
         return
 
     if tts_speaking:
-        # If already speaking, stop
-        tts_engine.stop()
+        engine.stop()
         tts_speaking = False
         update_tray("#2ecc71", "Koda: Ready")
         return
 
-    # Try last transcription first, fall back to clipboard
     text = last_transcription or pyperclip.paste()
     if not text:
         return
@@ -470,8 +475,10 @@ def read_back():
     def _speak():
         global tts_speaking
         try:
-            tts_engine.say(text)
-            tts_engine.runAndWait()
+            e = _get_tts()
+            if e:
+                e.say(text)
+                e.runAndWait()
         except Exception:
             pass
         tts_speaking = False
@@ -483,21 +490,21 @@ def read_back():
 def read_selected():
     """Read aloud whatever text is currently selected on screen."""
     global tts_speaking
-    if not tts_engine:
+    engine = _get_tts()
+    if not engine:
         return
 
     if tts_speaking:
-        tts_engine.stop()
+        engine.stop()
         tts_speaking = False
         update_tray("#2ecc71", "Koda: Ready")
         return
 
-    # Copy selected text
     original = pyperclip.paste()
     pyautogui.hotkey("ctrl", "c")
     time.sleep(0.2)
     text = pyperclip.paste()
-    pyperclip.copy(original)  # restore clipboard
+    pyperclip.copy(original)
 
     if not text:
         return
@@ -508,8 +515,10 @@ def read_selected():
     def _speak():
         global tts_speaking
         try:
-            tts_engine.say(text)
-            tts_engine.runAndWait()
+            e = _get_tts()
+            if e:
+                e.say(text)
+                e.runAndWait()
         except Exception:
             pass
         tts_speaking = False
