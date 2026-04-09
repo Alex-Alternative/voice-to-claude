@@ -2,7 +2,11 @@
 Koda Floating Status Overlay — always-on-top mini widget.
 
 Shows recording state, live streaming preview, and transcription status.
-Draggable, semi-transparent, unobtrusive. Toggleable from tray menu.
+Draggable, semi-transparent pill with rounded corners. Toggleable from tray menu.
+
+Uses Windows -transparentcolor trick: the root window has a "key" background color
+that's made invisible, and a Canvas draws the actual rounded pill shape on top.
+This gives true rounded corners on Windows.
 """
 
 import tkinter as tk
@@ -10,33 +14,38 @@ import threading
 import time
 
 
+# Transparent key color — must not appear anywhere in the actual UI
+_KEY_COLOR = "#010101"
+
+
 class KodaOverlay:
     """Floating status pill that shows Koda's current state."""
 
-    # State colors
     COLORS = {
-        "ready": "#2ecc71",       # Green
-        "recording": "#e74c3c",   # Red
-        "transcribing": "#f39c12", # Orange
-        "reading": "#9b59b6",     # Purple
-        "listening": "#3498db",   # Blue (wake word)
+        "ready": "#2ecc71",
+        "recording": "#e74c3c",
+        "transcribing": "#f39c12",
+        "reading": "#9b59b6",
+        "listening": "#3498db",
     }
 
     def __init__(self):
         self._root = None
-        self._label = None
-        self._preview_label = None
+        self._canvas = None
+        self._label_id = None
+        self._dot_id = None
+        self._preview_id = None
+        self._bg_id = None
         self._state = "ready"
         self._preview_text = ""
         self._visible = True
         self._drag_data = {"x": 0, "y": 0}
         self._thread = None
         self._running = False
-        self._opacity = 0.85
-        self._position = None  # (x, y) — remembers last drag position
+        self._opacity = 0.75
+        self._position = None
 
     def start(self):
-        """Launch the overlay in its own thread (tkinter needs its own mainloop)."""
         if self._running:
             return
         self._running = True
@@ -44,7 +53,6 @@ class KodaOverlay:
         self._thread.start()
 
     def stop(self):
-        """Shut down the overlay."""
         self._running = False
         if self._root:
             try:
@@ -53,80 +61,64 @@ class KodaOverlay:
                 pass
 
     def _run(self):
-        """Tkinter mainloop — runs in its own thread."""
         self._root = tk.Tk()
         root = self._root
 
-        # Frameless, always-on-top, transparent background
+        W, H = 260, 42
+        RADIUS = 21  # Half of height = perfect pill
+
         root.overrideredirect(True)
         root.attributes("-topmost", True)
         root.attributes("-alpha", self._opacity)
-        root.configure(bg="#1e1e2e")
-
-        # Remove from taskbar
         root.attributes("-toolwindow", True)
+        # Make the key color fully transparent → shaped window
+        root.configure(bg=_KEY_COLOR)
+        root.attributes("-transparentcolor", _KEY_COLOR)
 
-        # Main frame with rounded-corner look
-        # Outer frame with rounded feel — dark card style
-        BG = "#181825"
-        BG_INNER = "#1e1e2e"
-        ACCENT = "#89b4fa"
-        TEXT = "#cdd6f4"
-        TEXT_DIM = "#a6adc8"
+        # Canvas fills the window — we draw the pill shape on it
+        self._canvas = tk.Canvas(root, width=W, height=H, bg=_KEY_COLOR,
+                                 highlightthickness=0, bd=0)
+        self._canvas.pack()
 
-        # Border frame for subtle outline
-        border = tk.Frame(root, bg="#313244", padx=1, pady=1)
-        border.pack(fill="both", expand=True)
+        # Draw rounded pill background
+        BG = "#1e1e2e"
+        self._bg_id = self._rounded_rect(0, 0, W, H, RADIUS, fill=BG, outline="#313244", width=1)
 
-        frame = tk.Frame(border, bg=BG, padx=14, pady=8)
-        frame.pack(fill="both", expand=True)
+        # Status dot
+        DOT_X, DOT_Y, DOT_R = 18, H // 2, 5
+        self._dot_id = self._canvas.create_oval(
+            DOT_X - DOT_R, DOT_Y - DOT_R, DOT_X + DOT_R, DOT_Y + DOT_R,
+            fill="#2ecc71", outline="",
+        )
 
-        # Status indicator + text on one line
-        top_row = tk.Frame(frame, bg=BG)
-        top_row.pack(fill="x")
+        # Label
+        self._label_id = self._canvas.create_text(
+            32, H // 2, text="Koda — Ready", anchor="w",
+            fill="#cdd6f4", font=("Segoe UI Semibold", 10),
+        )
 
-        self._dot = tk.Canvas(top_row, width=14, height=14, bg=BG,
-                              highlightthickness=0)
-        self._dot.pack(side="left", padx=(0, 8), pady=(2, 0))
-        self._dot_item = self._dot.create_oval(1, 1, 13, 13, fill="#2ecc71", outline="#2ecc71", width=0)
+        # Preview (hidden initially, shown below pill when recording)
+        self._preview_id = None
+        self._W = W
+        self._H = H
+        self._RADIUS = RADIUS
 
-        self._label = tk.Label(top_row, text="Koda — Ready",
-                               bg=BG, fg=TEXT,
-                               font=("Segoe UI Semibold", 10), anchor="w")
-        self._label.pack(side="left", fill="x", expand=True)
-
-        # Preview text (shown during recording/transcribing)
-        self._preview_label = tk.Label(frame, text="",
-                                       bg=BG, fg=TEXT_DIM,
-                                       font=("Segoe UI", 9), anchor="w",
-                                       wraplength=300, justify="left")
-        self._preview_label.pack(fill="x", pady=(4, 0))
-        self._preview_label.pack_forget()  # Hidden initially
-
-        # Position: bottom-right of screen, above taskbar
+        # Position: bottom-right, above taskbar
         root.update_idletasks()
         if self._position:
             x, y = self._position
         else:
             screen_w = root.winfo_screenwidth()
             screen_h = root.winfo_screenheight()
-            w = 320
-            x = screen_w - w - 20
-            y = screen_h - 80
-        root.geometry(f"+{x}+{y}")
-        root.minsize(220, 0)
+            x = screen_w - W - 30
+            y = screen_h - 160
+        root.geometry(f"{W}x{H}+{x}+{y}")
 
-        # Drag bindings
-        all_widgets = (root, border, frame, top_row, self._label, self._dot)
-        for widget in all_widgets:
-            widget.bind("<Button-1>", self._on_drag_start)
-            widget.bind("<B1-Motion>", self._on_drag_motion)
+        # Drag
+        self._canvas.bind("<Button-1>", self._on_drag_start)
+        self._canvas.bind("<B1-Motion>", self._on_drag_motion)
+        self._canvas.bind("<Button-3>", lambda e: self.toggle_visible())
 
-        # Right-click to hide
-        for widget in all_widgets:
-            widget.bind("<Button-3>", lambda e: self.toggle_visible())
-
-        # Start update loop
         self._poll()
 
         try:
@@ -134,8 +126,26 @@ class KodaOverlay:
         except Exception:
             pass
 
+    def _rounded_rect(self, x1, y1, x2, y2, r, **kwargs):
+        """Draw a rounded rectangle on the canvas."""
+        c = self._canvas
+        points = [
+            x1 + r, y1,
+            x2 - r, y1,
+            x2, y1,
+            x2, y1 + r,
+            x2, y2 - r,
+            x2, y2,
+            x2 - r, y2,
+            x1 + r, y2,
+            x1, y2,
+            x1, y2 - r,
+            x1, y1 + r,
+            x1, y1,
+        ]
+        return c.create_polygon(points, smooth=True, **kwargs)
+
     def _poll(self):
-        """Periodic UI update from the tkinter thread."""
         if not self._running or not self._root:
             return
         try:
@@ -145,33 +155,54 @@ class KodaOverlay:
             pass
 
     def _apply_state(self):
-        """Update the visual state of the overlay."""
         color = self.COLORS.get(self._state, "#2ecc71")
         labels = {
             "ready": "Koda — Ready",
-            "recording": "Koda — Recording...",
-            "transcribing": "Koda — Transcribing...",
-            "reading": "Koda — Reading aloud...",
-            "listening": "Koda — Listening...",
+            "recording": "Recording...",
+            "transcribing": "Transcribing...",
+            "reading": "Reading aloud...",
+            "listening": "Listening...",
         }
 
-        self._dot.itemconfig(self._dot_item, fill=color)
-        self._label.config(text=labels.get(self._state, "Koda"))
+        self._canvas.itemconfig(self._dot_id, fill=color)
+        self._canvas.itemconfig(self._label_id, text=labels.get(self._state, "Koda"))
 
+        # Resize window for preview text during recording
         if self._preview_text and self._state in ("recording", "transcribing"):
             preview = self._preview_text
-            if len(preview) > 120:
-                preview = "..." + preview[-117:]
-            self._preview_label.config(text=preview)
-            self._preview_label.pack(fill="x", pady=(2, 0))
-        else:
-            self._preview_label.pack_forget()
+            if len(preview) > 80:
+                preview = "..." + preview[-77:]
 
-        # Slightly dimmer when idle, full opacity when active
-        if self._state == "ready":
-            self._root.attributes("-alpha", self._opacity * 0.9)
+            if self._preview_id:
+                self._canvas.itemconfig(self._preview_id, text=preview)
+            else:
+                # Expand pill
+                new_h = 62
+                self._canvas.delete(self._bg_id)
+                self._bg_id = self._rounded_rect(0, 0, self._W, new_h, self._RADIUS,
+                                                  fill="#1e1e2e", outline="#313244", width=1)
+                self._canvas.tag_lower(self._bg_id)
+                self._preview_id = self._canvas.create_text(
+                    32, 42, text=preview, anchor="w",
+                    fill="#a6adc8", font=("Segoe UI", 8),
+                )
+                self._root.geometry(f"{self._W}x{new_h}")
         else:
-            self._root.attributes("-alpha", self._opacity)
+            if self._preview_id:
+                self._canvas.delete(self._preview_id)
+                self._preview_id = None
+                # Shrink pill back
+                self._canvas.delete(self._bg_id)
+                self._bg_id = self._rounded_rect(0, 0, self._W, self._H, self._RADIUS,
+                                                  fill="#1e1e2e", outline="#313244", width=1)
+                self._canvas.tag_lower(self._bg_id)
+                self._root.geometry(f"{self._W}x{self._H}")
+
+        # Slightly dimmer when idle
+        if self._state == "ready":
+            self._root.attributes("-alpha", self._opacity * 0.85)
+        else:
+            self._root.attributes("-alpha", min(1.0, self._opacity * 1.1))
 
     def _on_drag_start(self, event):
         self._drag_data["x"] = event.x_root - self._root.winfo_x()
@@ -183,24 +214,16 @@ class KodaOverlay:
         self._root.geometry(f"+{x}+{y}")
         self._position = (x, y)
 
-    # --- Public API (thread-safe, called from voice.py) ---
+    # --- Public API ---
 
     def set_state(self, state, preview=""):
-        """Update overlay state. Safe to call from any thread.
-
-        Args:
-            state: One of 'ready', 'recording', 'transcribing', 'reading', 'listening'
-            preview: Optional preview text to show
-        """
         self._state = state
         self._preview_text = preview
 
     def set_preview(self, text):
-        """Update just the preview text without changing state."""
         self._preview_text = text
 
     def toggle_visible(self):
-        """Toggle overlay visibility."""
         if not self._root:
             return
         try:
@@ -214,7 +237,6 @@ class KodaOverlay:
             pass
 
     def show(self):
-        """Show the overlay."""
         if self._root and not self._visible:
             try:
                 self._root.deiconify()
@@ -223,7 +245,6 @@ class KodaOverlay:
                 pass
 
     def hide(self):
-        """Hide the overlay."""
         if self._root and self._visible:
             try:
                 self._root.withdraw()
