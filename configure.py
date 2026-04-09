@@ -232,7 +232,11 @@ def setup_model():
             ("Base    (~150MB) — Good balance of speed and accuracy", "base"),
             ("Small   (~500MB) — Better accuracy, moderate speed", "small"),
             ("Medium  (~1.5GB) — High accuracy, slower", "medium"),
-            ("Large   (~3GB)   — Best accuracy, slowest (needs fast CPU)", "large-v3"),
+            ("Large v2  (~3GB)   — High accuracy, slow", "large-v2"),
+            ("Large v3  (~3GB)   — Best accuracy, slowest (needs fast CPU)", "large-v3"),
+            ("Large v3 Turbo     — Near-best accuracy, faster than v3", "large-v3-turbo"),
+            ("Distil Large v3    — Distilled, fast + accurate", "distil-large-v3"),
+            ("Distil Medium (EN) — English-only, fast + good", "distil-medium.en"),
         ],
         default=1,  # base
     )
@@ -263,7 +267,14 @@ def setup_language():
             ("Chinese", "zh"),
             ("Japanese", "ja"),
             ("Korean", "ko"),
-            ("Other (set manually in config.json)", "en"),
+            ("Arabic", "ar"),
+            ("Hindi", "hi"),
+            ("Russian", "ru"),
+            ("Italian", "it"),
+            ("Dutch", "nl"),
+            ("Polish", "pl"),
+            ("Turkish", "tr"),
+            ("Auto-detect", "auto"),
         ],
         default=0,
     )

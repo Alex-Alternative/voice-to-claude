@@ -6,6 +6,18 @@ Cleans up Whisper transcription output before pasting.
 import re
 
 
+# --- Custom Vocabulary Replacement ---
+
+def apply_custom_vocabulary(text, custom_words):
+    """Replace misheard words with correct versions using case-insensitive word boundary matching."""
+    if not custom_words:
+        return text
+    for misheard, correct in custom_words.items():
+        pattern = re.compile(r'\b' + re.escape(misheard) + r'\b', re.IGNORECASE)
+        text = pattern.sub(correct, text)
+    return text
+
+
 # --- Filler Word Removal ---
 
 FILLER_PATTERNS = [

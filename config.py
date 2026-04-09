@@ -12,6 +12,7 @@ CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 DEFAULT_CONFIG = {
     "model_size": "base",
     "language": "en",
+    "output_mode": "auto_paste",
     "hotkey_dictation": "ctrl+space",
     "hotkey_command": "ctrl+shift+.",
     "hotkey_correction": "ctrl+shift+z",

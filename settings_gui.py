@@ -4,7 +4,7 @@ Opens from the tray menu or desktop shortcut.
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import json
 import os
 import sys
@@ -29,7 +29,7 @@ class KodaSettings(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Koda Settings")
-        self.geometry("520x660")
+        self.geometry("520x860")
         self.resizable(False, False)
         self.configure(bg="#1e1e2e")
 
@@ -90,13 +90,17 @@ class KodaSettings(tk.Tk):
         ttk.Label(model_frame, text="Model size:").grid(row=0, column=0, sticky="w", padx=(0, 10))
         self.model_var = tk.StringVar(value=self.config_data.get("model_size", "base"))
         model_combo = ttk.Combobox(model_frame, textvariable=self.model_var, width=22,
-                                   values=["tiny", "base", "small", "medium", "large-v3"], state="readonly")
+                                   values=["tiny", "base", "small", "medium", "large-v2", "large-v3",
+                                           "large-v3-turbo", "distil-large-v3", "distil-medium.en"],
+                                   state="readonly")
         model_combo.grid(row=0, column=1, sticky="w")
 
         ttk.Label(model_frame, text="Language:").grid(row=1, column=0, sticky="w", padx=(0, 10), pady=3)
         self.lang_var = tk.StringVar(value=self.config_data.get("language", "en"))
         lang_combo = ttk.Combobox(model_frame, textvariable=self.lang_var, width=22,
-                                  values=["en", "es", "fr", "de", "pt", "zh", "ja", "ko"], state="readonly")
+                                  values=["en", "es", "fr", "de", "pt", "zh", "ja", "ko",
+                                          "ar", "hi", "ru", "it", "nl", "pl", "tr", "auto"],
+                                  state="readonly")
         lang_combo.grid(row=1, column=1, sticky="w")
 
         # --- Mode ---
@@ -107,6 +111,23 @@ class KodaSettings(tk.Tk):
         mode_frame.pack(fill="x", pady=2)
         ttk.Radiobutton(mode_frame, text="Hold-to-talk (hold key while speaking)", variable=self.mode_var, value="hold").pack(anchor="w")
         ttk.Radiobutton(mode_frame, text="Toggle (press once, auto-stops on silence)", variable=self.mode_var, value="toggle").pack(anchor="w")
+
+        # --- Output Mode ---
+        ttk.Label(main, text="OUTPUT MODE", style="Header.TLabel").pack(anchor="w", pady=(15, 5))
+
+        self.output_var = tk.StringVar(value=self.config_data.get("output_mode", "auto_paste"))
+        output_frame = ttk.Frame(main)
+        output_frame.pack(fill="x", pady=2)
+        ttk.Radiobutton(output_frame, text="Auto-paste (copy + Ctrl+V into active window)", variable=self.output_var, value="auto_paste").pack(anchor="w")
+        ttk.Radiobutton(output_frame, text="Clipboard only (copy to clipboard, no paste)", variable=self.output_var, value="clipboard").pack(anchor="w")
+
+        # --- Custom Words ---
+        ttk.Label(main, text="CUSTOM WORDS", style="Header.TLabel").pack(anchor="w", pady=(15, 5))
+
+        cw_frame = ttk.Frame(main)
+        cw_frame.pack(fill="x", pady=2)
+        ttk.Label(cw_frame, text="Replace misheard words with correct versions:").pack(anchor="w")
+        ttk.Button(cw_frame, text="Edit custom_words.json", command=self._open_custom_words).pack(anchor="w", pady=(5, 0))
 
         # --- Toggles ---
         ttk.Label(main, text="FEATURES", style="Header.TLabel").pack(anchor="w", pady=(15, 5))
@@ -150,6 +171,14 @@ class KodaSettings(tk.Tk):
                                    values=["slow", "normal", "fast"], state="readonly")
         speed_combo.grid(row=1, column=1, sticky="w")
 
+        # --- History ---
+        ttk.Label(main, text="HISTORY", style="Header.TLabel").pack(anchor="w", pady=(15, 5))
+
+        hist_frame = ttk.Frame(main)
+        hist_frame.pack(fill="x", pady=2)
+        ttk.Button(hist_frame, text="View transcript history", command=self._open_history).pack(side="left", padx=(0, 10))
+        ttk.Button(hist_frame, text="Export history", command=self._export_history).pack(side="left")
+
         # --- Buttons ---
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill="x", pady=(20, 0))
@@ -176,6 +205,7 @@ class KodaSettings(tk.Tk):
         cfg["model_size"] = self.model_var.get()
         cfg["language"] = self.lang_var.get()
         cfg["hotkey_mode"] = self.mode_var.get()
+        cfg["output_mode"] = self.output_var.get()
         cfg["sound_effects"] = self.sound_var.get()
         cfg["noise_reduction"] = self.noise_var.get()
         cfg["streaming"] = self.stream_var.get()
@@ -205,6 +235,85 @@ class KodaSettings(tk.Tk):
         subprocess.Popen(["cmd", "/c", start_bat], cwd=SCRIPT_DIR,
                          creationflags=subprocess.CREATE_NO_WINDOW)
         self.destroy()
+
+    def _open_custom_words(self):
+        """Open custom_words.json in the default editor."""
+        custom_words_path = os.path.join(SCRIPT_DIR, "custom_words.json")
+        if not os.path.exists(custom_words_path):
+            with open(custom_words_path, "w", encoding="utf-8") as f:
+                json.dump({"coda": "Koda", "claude code": "Claude Code"}, f, indent=2)
+        os.startfile(custom_words_path)
+
+    def _open_history(self):
+        """Open a simple history viewer window."""
+        try:
+            from history import get_recent, search_history
+        except ImportError:
+            messagebox.showerror("Koda", "History module not found.")
+            return
+
+        hist_win = tk.Toplevel(self)
+        hist_win.title("Koda - Transcript History")
+        hist_win.geometry("600x450")
+        hist_win.configure(bg="#1e1e2e")
+
+        top_frame = ttk.Frame(hist_win)
+        top_frame.pack(fill="x", padx=10, pady=(10, 5))
+
+        ttk.Label(top_frame, text="Search:").pack(side="left", padx=(0, 5))
+        search_var = tk.StringVar()
+        search_entry = ttk.Entry(top_frame, textvariable=search_var, width=40)
+        search_entry.pack(side="left", padx=(0, 5))
+
+        text_widget = tk.Text(hist_win, bg="#313244", fg="#cdd6f4", font=("Consolas", 10),
+                              wrap="word", state="disabled")
+        text_widget.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        def refresh(query=None):
+            if query:
+                rows = search_history(query, limit=50)
+            else:
+                rows = get_recent(limit=50)
+            text_widget.config(state="normal")
+            text_widget.delete("1.0", "end")
+            if not rows:
+                text_widget.insert("end", "No transcriptions found.")
+            else:
+                for row in rows:
+                    _id, ts, text, mode, dur = row
+                    ts_short = ts[:19].replace("T", " ") if ts else ""
+                    text_widget.insert("end", f"[{ts_short}] ({mode}, {dur:.1f}s)\n")
+                    text_widget.insert("end", f"  {text}\n\n")
+            text_widget.config(state="disabled")
+
+        def on_search(*args):
+            query = search_var.get().strip()
+            refresh(query if query else None)
+
+        ttk.Button(top_frame, text="Search", command=on_search).pack(side="left")
+        search_entry.bind("<Return>", on_search)
+
+        refresh()
+
+    def _export_history(self):
+        """Export transcript history to a text file."""
+        try:
+            from history import export_history
+        except ImportError:
+            messagebox.showerror("Koda", "History module not found.")
+            return
+
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            title="Export Transcript History",
+        )
+        if filepath:
+            try:
+                export_history(filepath)
+                messagebox.showinfo("Koda", f"History exported to:\n{filepath}")
+            except Exception as e:
+                messagebox.showerror("Koda", f"Export failed: {e}")
 
     def on_close(self):
         self.destroy()

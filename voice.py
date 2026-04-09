@@ -23,7 +23,8 @@ import pystray
 from PIL import Image, ImageDraw
 
 from config import load_config, save_config, open_config_file
-from text_processing import process_text
+from text_processing import process_text, apply_custom_vocabulary
+from history import init_db, save_transcription
 
 # --- Version ---
 VERSION = "2.0.0"
@@ -349,10 +350,11 @@ def _streaming_thread():
             continue
         try:
             audio = np.concatenate(audio_chunks, axis=0).flatten()
-            segments, _ = model.transcribe(
-                audio, beam_size=1, language=config.get("language", "en"),
-                vad_filter=False,
-            )
+            stream_kwargs = {"beam_size": 1, "vad_filter": False}
+            stream_lang = config.get("language", "en")
+            if stream_lang != "auto":
+                stream_kwargs["language"] = stream_lang
+            segments, _ = model.transcribe(audio, **stream_kwargs)
             text = " ".join(seg.text for seg in segments).strip()
             if text:
                 streaming_text = text
@@ -401,9 +403,21 @@ def stop_recording():
     threading.Thread(target=_transcribe_and_paste, daemon=True).start()
 
 
+def _load_custom_words():
+    """Load custom vocabulary from custom_words.json."""
+    custom_words_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_words.json")
+    try:
+        import json
+        with open(custom_words_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 def _transcribe_and_paste():
     global last_transcription
     try:
+        rec_start = time.time()
         audio = np.concatenate(audio_chunks, axis=0).flatten()
 
         # Noise reduction
@@ -414,19 +428,36 @@ def _transcribe_and_paste():
             except Exception:
                 pass
 
-        # Transcribe — vad_filter OFF for short phrases, beam_size 3 for speed
+        # Load custom vocabulary for initial_prompt and post-processing
+        custom_words = _load_custom_words()
+
+        # Build transcription kwargs
+        transcribe_kwargs = {
+            "beam_size": 3,
+            "vad_filter": False,
+        }
+
+        # Language: "auto" means omit the language param to let Whisper auto-detect
         language = config.get("language", "en")
-        segments, info = model.transcribe(
-            audio,
-            beam_size=3,
-            language=language,
-            vad_filter=False,
-        )
+        if language != "auto":
+            transcribe_kwargs["language"] = language
+
+        # Pass custom words as initial_prompt to bias Whisper recognition
+        if custom_words:
+            prompt_words = " ".join(custom_words.values())
+            transcribe_kwargs["initial_prompt"] = prompt_words
+
+        # Transcribe — vad_filter OFF for short phrases, beam_size 3 for speed
+        segments, info = model.transcribe(audio, **transcribe_kwargs)
         text = " ".join(seg.text for seg in segments).strip()
 
         if not text:
             update_tray("#2ecc71", "Koda: Ready")
             return
+
+        # Apply custom vocabulary replacements
+        if custom_words:
+            text = apply_custom_vocabulary(text, custom_words)
 
         # Post-processing
         if recording_mode == "command":
@@ -445,10 +476,23 @@ def _transcribe_and_paste():
 
         if processed:
             last_transcription = processed
-            pyperclip.copy(processed)
-            time.sleep(0.15)
-            pyautogui.hotkey("ctrl", "v")
-            play_success_sound()
+            duration = time.time() - rec_start
+
+            output_mode = config.get("output_mode", "auto_paste")
+            if output_mode == "clipboard":
+                pyperclip.copy(processed)
+                play_success_sound()
+            else:
+                pyperclip.copy(processed)
+                time.sleep(0.15)
+                pyautogui.hotkey("ctrl", "v")
+                play_success_sound()
+
+            # Save to history
+            try:
+                save_transcription(processed, recording_mode, duration)
+            except Exception:
+                pass
 
     except Exception as e:
         play_error_sound()
@@ -675,6 +719,8 @@ def build_menu():
     mode = config.get("hotkey_mode", "hold")
     mode_label = "Hold-to-talk" if mode == "hold" else "Toggle (auto-stop)"
     wake_enabled = config.get("wake_word", {}).get("enabled", False)
+    output_mode = config.get("output_mode", "auto_paste")
+    output_label = "Auto-paste" if output_mode == "auto_paste" else "Clipboard only"
 
     return pystray.Menu(
         pystray.MenuItem(f"Koda v{VERSION}", None, enabled=False),
@@ -713,6 +759,10 @@ def build_menu():
             checked=lambda item: config.get("wake_word", {}).get("enabled", False),
         ),
         pystray.MenuItem(
+            f"Output: {output_label}",
+            toggle_output_mode,
+        ),
+        pystray.MenuItem(
             "Read-back voice",
             pystray.Menu(*_build_voice_menu_items()),
         ),
@@ -725,6 +775,7 @@ def build_menu():
             "Switch to Toggle mode" if mode == "hold" else "Switch to Hold mode",
             switch_mode,
         ),
+        pystray.MenuItem("Edit custom words", lambda icon, item: _open_custom_words()),
         pystray.MenuItem("Settings window", lambda icon, item: _open_settings_gui()),
         pystray.MenuItem("Open config file", lambda icon, item: open_config_file()),
         pystray.Menu.SEPARATOR,
@@ -828,6 +879,23 @@ def toggle_wake_word(icon, item):
     icon.menu = build_menu()
 
 
+def toggle_output_mode(icon, item):
+    current = config.get("output_mode", "auto_paste")
+    config["output_mode"] = "clipboard" if current == "auto_paste" else "auto_paste"
+    save_config(config)
+    icon.menu = build_menu()
+
+
+def _open_custom_words():
+    """Open custom_words.json in the default editor."""
+    custom_words_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_words.json")
+    if not os.path.exists(custom_words_path):
+        import json
+        with open(custom_words_path, "w", encoding="utf-8") as f:
+            json.dump({"coda": "Koda", "claude code": "Claude Code"}, f, indent=2)
+    os.startfile(custom_words_path)
+
+
 def switch_mode(icon, item):
     keyboard.unhook_all()
     current = config.get("hotkey_mode", "hold")
@@ -858,6 +926,7 @@ def run_setup():
     load_whisper_model()
     init_vad()
     init_tts()
+    init_db()
 
     mic_device = config.get("mic_device")
     stream = sd.InputStream(
