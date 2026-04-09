@@ -29,7 +29,7 @@ class KodaSettings(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Koda Settings")
-        self.geometry("520x620")
+        self.geometry("520x660")
         self.resizable(False, False)
         self.configure(bg="#1e1e2e")
 
@@ -127,7 +127,7 @@ class KodaSettings(tk.Tk):
         ttk.Checkbutton(main, text="Code vocabulary (open paren → ( in command mode)", variable=self.code_var).pack(anchor="w")
 
         # --- Read-back voice ---
-        ttk.Label(main, text="READ-BACK VOICE", style="Header.TLabel").pack(anchor="w", pady=(15, 5))
+        ttk.Label(main, text="READ-BACK", style="Header.TLabel").pack(anchor="w", pady=(15, 5))
 
         voice_frame = ttk.Frame(main)
         voice_frame.pack(fill="x", pady=2)
@@ -136,11 +136,19 @@ class KodaSettings(tk.Tk):
         voice_names = [name for name, _ in self.voices]
         current_voice = self.config_data.get("tts", {}).get("voice", voice_names[0] if voice_names else "")
 
+        ttk.Label(voice_frame, text="Voice:").grid(row=0, column=0, sticky="w", padx=(0, 10))
         self.voice_var = tk.StringVar(value=current_voice)
         if voice_names:
-            voice_combo = ttk.Combobox(voice_frame, textvariable=self.voice_var, width=40,
+            voice_combo = ttk.Combobox(voice_frame, textvariable=self.voice_var, width=35,
                                        values=voice_names, state="readonly")
-            voice_combo.pack(anchor="w")
+            voice_combo.grid(row=0, column=1, sticky="w")
+
+        ttk.Label(voice_frame, text="Speed:").grid(row=1, column=0, sticky="w", padx=(0, 10), pady=3)
+        current_speed = self.config_data.get("tts", {}).get("rate", "normal")
+        self.speed_var = tk.StringVar(value=current_speed)
+        speed_combo = ttk.Combobox(voice_frame, textvariable=self.speed_var, width=35,
+                                   values=["slow", "normal", "fast"], state="readonly")
+        speed_combo.grid(row=1, column=1, sticky="w")
 
         # --- Buttons ---
         btn_frame = ttk.Frame(main)
@@ -178,6 +186,7 @@ class KodaSettings(tk.Tk):
 
         tts = cfg.setdefault("tts", {})
         tts["voice"] = self.voice_var.get()
+        tts["rate"] = self.speed_var.get()
 
         save_config(cfg)
         messagebox.showinfo("Koda", "Settings saved! Restart Koda for changes to take effect.")

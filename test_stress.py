@@ -221,10 +221,10 @@ print("\n=== 4. System Integration ===")
 def test_clipboard():
     import pyperclip
     original = pyperclip.paste()
-    pyperclip.copy("voice-to-claude-test-12345")
+    pyperclip.copy("koda-test-12345")
     result = pyperclip.paste()
     pyperclip.copy(original)  # restore
-    if result != "voice-to-claude-test-12345":
+    if result != "koda-test-12345":
         return f"Clipboard mismatch: got '{result}'"
     return True
 
@@ -254,9 +254,36 @@ def test_tray_icon_create():
     return True
 
 
+def test_sound_files():
+    """Verify all expected sound files exist in sounds/."""
+    sounds_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sounds")
+    expected = ["start.wav", "stop.wav", "success.wav", "error.wav"]
+    missing = [f for f in expected if not os.path.exists(os.path.join(sounds_dir, f))]
+    if missing:
+        return f"Missing sound files: {', '.join(missing)}"
+    return True
+
+
+def test_tts_engine():
+    """Initialize pyttsx3 and verify it works."""
+    try:
+        import pyttsx3
+        engine = pyttsx3.init()
+        voices = engine.getProperty('voices')
+        if not voices:
+            return "No TTS voices found"
+        rate = engine.getProperty('rate')
+        print(f"         TTS engine OK — {len(voices)} voice(s), rate={rate}")
+        return True
+    except Exception as e:
+        return f"pyttsx3 init failed: {e}"
+
+
 test("Clipboard read/write", test_clipboard)
 test("Keyboard hook (F9)", test_keyboard_hook)
 test("System tray icon creation", test_tray_icon_create)
+test("Sound files exist", test_sound_files)
+test("TTS engine (pyttsx3)", test_tts_engine)
 
 
 # ============================================================

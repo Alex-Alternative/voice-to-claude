@@ -478,6 +478,12 @@ def undo_and_rerecord():
 tts_engine = None
 tts_speaking = False
 
+TTS_SPEED_MAP = {
+    "slow": 120,
+    "normal": 160,
+    "fast": 220,
+}
+
 
 def init_tts():
     """Placeholder — TTS is initialized lazily on first use to avoid COM threading issues."""
@@ -491,7 +497,8 @@ def _get_tts():
         try:
             import pyttsx3
             tts_engine = pyttsx3.init()
-            rate = config.get("tts", {}).get("rate", 160)
+            speed_name = config.get("tts", {}).get("rate", "normal")
+            rate = TTS_SPEED_MAP.get(speed_name, 160) if isinstance(speed_name, str) else speed_name
             tts_engine.setProperty('rate', rate)
             # Set voice if configured
             voice_name = config.get("tts", {}).get("voice", None)
@@ -709,6 +716,10 @@ def build_menu():
             "Read-back voice",
             pystray.Menu(*_build_voice_menu_items()),
         ),
+        pystray.MenuItem(
+            "Read-back speed",
+            pystray.Menu(*_build_speed_menu_items()),
+        ),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(
             "Switch to Toggle mode" if mode == "hold" else "Switch to Hold mode",
@@ -746,6 +757,30 @@ def _build_voice_menu_items():
             short,
             make_handler(name),
             checked=lambda item, n=name: n.lower() in config.get("tts", {}).get("voice", "").lower(),
+            radio=True,
+        ))
+    return items
+
+
+def _build_speed_menu_items():
+    """Build radio button menu items for TTS read-back speed."""
+    current_speed = config.get("tts", {}).get("rate", "normal")
+    items = []
+    for label, key in [("Slow (120 wpm)", "slow"), ("Normal (160 wpm)", "normal"), ("Fast (220 wpm)", "fast")]:
+        def make_handler(speed_key):
+            def handler(icon, item):
+                global tts_engine
+                tts = config.setdefault("tts", {})
+                tts["rate"] = speed_key
+                save_config(config)
+                tts_engine = None  # Reset so it picks up new rate
+                icon.menu = build_menu()
+            return handler
+
+        items.append(pystray.MenuItem(
+            label,
+            make_handler(key),
+            checked=lambda item, k=key: config.get("tts", {}).get("rate", "normal") == k,
             radio=True,
         ))
     return items

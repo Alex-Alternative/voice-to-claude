@@ -453,9 +453,10 @@ def main():
 
     print("  ─────────────────────────────────────────\n")
     print("  To start Koda, double-click start.bat")
-    print("  To re-run this setup, double-click configure.bat\n")
+    print("  To re-run this setup, double-click configure.bat")
+    print("  To open the settings GUI, double-click settings.bat\n")
     print("  You can also change settings anytime by right-clicking")
-    print("  the tray icon or editing config.json directly.\n")
+    print("  the Koda tray icon or editing config.json directly.\n")
     input("  Press Enter to exit setup...")
 
 

@@ -68,3 +68,9 @@ echo.
 
 :: Run interactive setup
 python configure.py
+
+echo.
+echo TIP: You can change settings anytime by running:
+echo      settings.bat     (GUI settings window)
+echo      configure.bat    (command-line setup wizard)
+echo.

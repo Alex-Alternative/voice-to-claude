@@ -40,6 +40,10 @@ DEFAULT_CONFIG = {
         "enabled": False,
         "model": "phi3:mini",
     },
+    "tts": {
+        "rate": "normal",
+        "voice": "",
+    },
 }
 
 

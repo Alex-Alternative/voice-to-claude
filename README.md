@@ -12,8 +12,10 @@ Runs locally using [Whisper](https://github.com/openai/whisper) — no cloud API
 - **Two modes** — Dictation (light cleanup) and Command (full cleanup for coding)
 - **Filler word removal** — Strips "um", "uh", "you know", "basically"
 - **Code vocabulary** — Say "open paren" and get `(`, "camel case user name" → `userName`
-- **Read-back** — Koda reads your last transcription or selected text aloud
+- **Read-back** — Koda reads your last transcription or selected text aloud (with adjustable speed)
 - **Correction mode** — Undo last paste and re-record
+- **Streaming transcription** — Live preview of what you're saying while recording
+- **Settings GUI** — Graphical settings window for easy configuration
 - **LLM polish** — Optional local AI cleanup via Ollama (free, no API costs)
 - **Sound effects** — Audio chimes for recording start/stop/success
 - **System tray app** — Runs silently with a color-coded status icon
@@ -89,9 +91,60 @@ All hotkeys are configurable in `config.json` or via the setup wizard (`configur
 ### Right-click tray menu
 
 - Toggle sound effects, filler removal, code vocabulary, noise reduction, LLM polish
+- Choose read-back voice and speed (Slow / Normal / Fast)
 - Switch between Hold and Toggle mode
-- Open settings file
+- Open Settings GUI or config file directly
 - Quit
+
+---
+
+## Settings GUI
+
+Koda includes a graphical settings window for easy configuration without editing JSON files.
+
+**How to open:**
+- Right-click the Koda tray icon and select **Settings window**
+- Double-click **`settings.bat`** in the Koda folder
+- Or use the desktop shortcut (created during install)
+
+**What you can configure:**
+- Hotkeys for dictation, command, correction, and read-back
+- Speech model size and language
+- Recording mode (hold-to-talk vs. toggle)
+- Sound effects, filler word removal, noise reduction, streaming transcription, code vocabulary
+- Read-back voice and speed (slow / normal / fast)
+
+Changes take effect after restarting Koda. The Settings GUI includes a **Save & Restart** button that restarts Koda automatically.
+
+---
+
+## Streaming Transcription
+
+When enabled (on by default), Koda shows a live preview of your speech while you're still recording.
+
+- The tray icon tooltip updates every 2 seconds with a partial transcription
+- This uses a fast single-beam transcription pass on the audio collected so far
+- The final transcription (when you release the hotkey) uses a higher-quality pass with beam search
+- Toggle streaming on/off in the Settings GUI or in `config.json` (`"streaming": true`)
+
+Streaming is useful for confirming Koda is hearing you, especially in noisy environments or when using toggle mode.
+
+---
+
+## Read-back Speed Control
+
+Koda can read back your last transcription or any selected text aloud. The read-back speed is configurable:
+
+| Speed | Words per minute | Best for |
+|---|---|---|
+| Slow | 120 | Careful review, accessibility |
+| Normal | 160 | General use (default) |
+| Fast | 220 | Quick playback |
+
+**Change the speed:**
+- Right-click tray icon > **Read-back speed** > choose Slow / Normal / Fast
+- Or set it in the Settings GUI under the **Read-back** section
+- Or edit `config.json`: `"tts": {"rate": "normal"}`
 
 ---
 
@@ -118,6 +171,9 @@ All settings are in `config.json` (created on first run). Edit directly or use t
 | `code_vocabulary` | `false` | Expand "open paren" → `(` in command mode |
 | `llm_polish.enabled` | `false` | AI cleanup via Ollama |
 | `llm_polish.model` | `"phi3:mini"` | Ollama model to use |
+| `tts.rate` | `"normal"` | Read-back speed: `"slow"`, `"normal"`, `"fast"` |
+| `tts.voice` | `""` | TTS voice name (empty = system default) |
+| `streaming` | `true` | Live transcription preview while recording |
 
 ### Whisper model sizes
 
@@ -220,6 +276,8 @@ Double-click **`uninstall_startup.bat`** to remove.
 | `config.json` | Your settings (auto-created) |
 | `configure.py` | Interactive setup wizard |
 | `configure.bat` | Re-run setup wizard |
+| `settings_gui.py` | Graphical settings window |
+| `settings.bat` | Launch settings GUI |
 | `install.bat` | One-time installer |
 | `start.bat` | Launch Koda |
 | `test.bat` | Run stress tests |
@@ -241,6 +299,17 @@ python build_exe.py
 ```
 
 Output: `dist\Koda.exe` (~150MB). Users still need to download the Whisper model on first run.
+
+### Sharing Koda.exe with others
+
+1. Build the exe with the command above
+2. Copy the `dist\Koda.exe` file to whoever needs it
+3. The recipient double-clicks `Koda.exe` to launch — no Python installation required
+4. On first run, the Whisper model (~150MB for "base") is downloaded automatically
+5. The recipient can right-click the tray icon to configure settings
+6. A `config.json` file is created in the same directory as the exe
+
+**Note:** The recipient's machine still needs a working microphone and Windows 10/11. If they want LLM polish, they'll need to install Ollama separately.
 
 ---
 
