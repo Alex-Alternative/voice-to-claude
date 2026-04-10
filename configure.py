@@ -157,12 +157,24 @@ def setup_hotkeys():
     banner()
     print("  STEP 2 of 8: HOTKEYS\n")
     print("  ─────────────────────────────────────────\n")
-    print("  Koda has three voice modes plus utility keys.\n")
-    print("  Defaults use Ctrl+Space for dictation and F-keys")
-    print("  for everything else. You can customize each one.\n")
+    print("  Koda uses hotkeys to control voice input.")
+    print("  Ctrl+Space for main dictation, F-keys for the rest.\n")
+    print("  Here's what each one does:\n")
+    print("  VOICE MODES (hold key to talk, release to paste):")
+    print("    Dictation    - Pastes exactly what you say with light cleanup")
+    print("    Command      - Cleans up your speech (removes fillers, formats code)")
+    print("    Prompt Assist- Turns your speech into a structured prompt for")
+    print("                   ChatGPT, Claude, or any AI tool\n")
+    print("  UTILITIES:")
+    print("    Correction   - Made a mistake? Undoes the last paste and lets")
+    print("                   you re-record immediately")
+    print("    Read Back    - Reads your last transcription out loud so you")
+    print("                   can hear what was typed")
+    print("    Read Selected- Highlight any text on screen and have Koda")
+    print("                   read it to you\n")
 
     # --- Dictation (main) ---
-    print("  ── Dictation (main, most used) ──\n")
+    print("  ── Dictation hotkey (your main key, used most often) ──\n")
     dictation = ask_choice(
         "Pick your dictation hotkey:",
         DICTATION_OPTIONS,
@@ -171,13 +183,12 @@ def setup_hotkeys():
     print(f"\n  Dictation: {dictation}\n")
 
     # --- Customize the rest? ---
-    print("  ── Other hotkeys ──\n")
-    print("  Defaults:")
-    print("    F8  = Command mode (cleaned up text)")
-    print("    F9  = Prompt Assist (structures speech for LLMs)")
-    print("    F7  = Correction (undo last paste, re-record)")
-    print("    F6  = Read back last transcription")
-    print("    F5  = Read selected text aloud\n")
+    print("  ── Other hotkeys (defaults shown) ──\n")
+    print("    F8  = Command      - Hold to talk, pastes cleaned-up text")
+    print("    F9  = Prompt Assist - Hold to talk, pastes a structured AI prompt")
+    print("    F7  = Correction   - Undo last paste and re-record")
+    print("    F6  = Read Back    - Reads last transcription aloud")
+    print("    F5  = Read Selected - Reads highlighted text aloud\n")
 
     customize = ask_yes_no("Customize these? (or keep defaults)", default=False)
 
@@ -190,23 +201,33 @@ def setup_hotkeys():
     if customize:
         print("\n  Pick an F-key for each function:\n")
 
-        print("  ── Command mode (cleaned up text for coding) ──\n")
+        print("  ── Command ──")
+        print("  Hold to talk. Cleans up your speech: removes filler words,")
+        print("  formats code terms, and optionally polishes with AI.\n")
         command = ask_choice("Command hotkey:", FKEY_OPTIONS, default=3)  # F8
         print()
 
-        print("  ── Prompt Assist (structures speech for LLMs) ──\n")
+        print("  ── Prompt Assist ──")
+        print("  Hold to talk. Turns your speech into a well-structured prompt")
+        print("  for ChatGPT, Claude, or any AI assistant.\n")
         prompt = ask_choice("Prompt Assist hotkey:", FKEY_OPTIONS, default=4)  # F9
         print()
 
-        print("  ── Correction (undo + re-record) ──\n")
+        print("  ── Correction ──")
+        print("  Made a mistake? Press this to undo the last paste and")
+        print("  immediately start re-recording.\n")
         correction = ask_choice("Correction hotkey:", FKEY_OPTIONS, default=2)  # F7
         print()
 
-        print("  ── Read back (read last transcription aloud) ──\n")
+        print("  ── Read Back ──")
+        print("  Reads your last transcription out loud through your speakers")
+        print("  so you can hear what was typed without looking.\n")
         readback = ask_choice("Read back hotkey:", FKEY_OPTIONS, default=1)  # F6
         print()
 
-        print("  ── Read selected (read highlighted text aloud) ──\n")
+        print("  ── Read Selected ──")
+        print("  Highlight any text on screen, press this key, and Koda")
+        print("  reads it aloud. Great for proofreading.\n")
         readback_sel = ask_choice("Read selected hotkey:", FKEY_OPTIONS, default=0)  # F5
 
     print()
