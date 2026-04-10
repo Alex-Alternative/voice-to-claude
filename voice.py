@@ -59,38 +59,72 @@ base_config = {}  # Original config before profile overrides
 # ============================================================
 
 def create_icon(color="gray"):
-    """Create a polished mic icon for the system tray.
+    """Create a branded K + soundwave icon for the system tray.
 
-    Rounded square background with a clean microphone glyph.
-    Colors: gray=idle, #2ecc71=ready, #e74c3c=recording, #f39c12=processing,
-            #9b59b6=reading, #3498db=listening.
+    Rounded square with bold 'K' that has sound wave bars integrated
+    into its right side. Signature Koda green (#2ecc71) base.
+    State color shows as a small dot indicator.
     """
     size = 64
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Rounded square background with subtle gradient feel
-    # Darker border for depth
-    border_color = _darken(color, 0.7)
+    # Rounded square background — always Koda green base for brand consistency
+    base = "#2ecc71"
+    border_color = _darken(base, 0.7)
     draw.rounded_rectangle([0, 0, 63, 63], radius=14, fill=border_color)
-    draw.rounded_rectangle([2, 2, 61, 61], radius=13, fill=color)
+    draw.rounded_rectangle([2, 2, 61, 61], radius=13, fill=base)
 
-    # Lighter highlight stripe at top for gloss effect
-    highlight = _lighten(color, 1.3)
-    draw.rounded_rectangle([4, 3, 59, 20], radius=10, fill=highlight)
-    # Blend back the bottom of the highlight
-    draw.rounded_rectangle([2, 14, 61, 61], radius=10, fill=color)
+    # Subtle top highlight for depth
+    highlight = _lighten(base, 1.2)
+    draw.rounded_rectangle([4, 3, 59, 22], radius=10, fill=highlight)
+    draw.rounded_rectangle([2, 16, 61, 61], radius=10, fill=base)
 
-    # Microphone body (rounded pill shape)
-    draw.rounded_rectangle([24, 10, 40, 34], radius=8, fill="white")
+    # Bold K letterform (white)
+    W = "white"
+    # Left vertical stroke
+    draw.rounded_rectangle([14, 12, 20, 50], radius=2, fill=W)
+    # Upper diagonal (K arm)
+    for i in range(12):
+        x = 20 + i
+        y1 = 30 - i
+        draw.line([x, y1, x, y1 + 5], fill=W, width=1)
+    # Lower diagonal (K leg)
+    for i in range(12):
+        x = 20 + i
+        y1 = 31 + i
+        draw.line([x, y1, x, y1 + 5], fill=W, width=1)
 
-    # Microphone arc (the cradle)
-    draw.arc([17, 22, 47, 48], start=0, end=180, fill="white", width=3)
+    # Sound wave bars (right side, integrated with K)
+    bar_x = 36
+    bar_heights = [8, 16, 12, 6]
+    cy = 31
+    for i, h in enumerate(bar_heights):
+        x = bar_x + i * 5
+        draw.rounded_rectangle([x, cy - h // 2, x + 3, cy + h // 2], radius=1, fill=W)
 
-    # Mic stand
-    draw.line([32, 48, 32, 54], fill="white", width=2)
-    # Base
-    draw.rounded_rectangle([24, 53, 40, 56], radius=2, fill="white")
+    # State indicator dot (bottom-right corner)
+    if color != "#2ecc71" and color != "gray":
+        dot_r = 7
+        dot_cx, dot_cy = 54, 54
+        # Dark ring for visibility
+        draw.ellipse([dot_cx - dot_r - 1, dot_cy - dot_r - 1,
+                      dot_cx + dot_r + 1, dot_cy + dot_r + 1], fill=border_color)
+        draw.ellipse([dot_cx - dot_r, dot_cy - dot_r,
+                      dot_cx + dot_r, dot_cy + dot_r], fill=color)
+    elif color == "gray":
+        # Gray state — dim the whole icon
+        draw.rounded_rectangle([2, 2, 61, 61], radius=13, fill=(80, 80, 80))
+        # Redraw K and waves in dimmer white
+        DIM = (160, 160, 160)
+        draw.rounded_rectangle([14, 12, 20, 50], radius=2, fill=DIM)
+        for i in range(12):
+            x = 20 + i
+            draw.line([x, 30 - i, x, 35 - i], fill=DIM, width=1)
+            draw.line([x, 31 + i, x, 36 + i], fill=DIM, width=1)
+        for i, h in enumerate(bar_heights):
+            x = bar_x + i * 5
+            draw.rounded_rectangle([x, cy - h // 2, x + 3, cy + h // 2], radius=1, fill=DIM)
 
     return img
 
