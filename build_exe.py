@@ -47,12 +47,30 @@ args = [
     # Bundle sounds directory and plugins
     f"--add-data={os.path.join(SCRIPT_DIR, 'sounds')};sounds",
     f"--add-data={os.path.join(SCRIPT_DIR, 'plugins')};plugins",
-    # Hidden imports for pystray, PIL, pyttsx3
+    # Hidden imports for pystray, PIL, pyttsx3, multiprocessing
     "--hidden-import=pystray._win32",
     "--hidden-import=PIL._tkinter_finder",
     "--hidden-import=comtypes.stream",
     "--hidden-import=pyttsx3.drivers",
     "--hidden-import=pyttsx3.drivers.sapi5",
+    "--hidden-import=multiprocessing.popen_spawn_win32",
+    # Exclude heavy optional dependencies not needed at runtime
+    # scipy/sklearn/sympy: pulled by openwakeword/noisereduce (optional features)
+    # matplotlib: pulled by noisereduce (optional)
+    # tkinter: matplotlib backend, not used
+    # pytest: dev dependency, not needed in exe
+    "--exclude-module=scipy",
+    "--exclude-module=sklearn",
+    "--exclude-module=scikit-learn",
+    "--exclude-module=matplotlib",
+    "--exclude-module=sympy",
+    "--exclude-module=pytest",
+    "--exclude-module=pygments",
+    "--exclude-module=tkinter",
+    "--exclude-module=_tkinter",
+    "--exclude-module=fontTools",
+    "--exclude-module=setuptools",
+    "--exclude-module=pip",
     # Output paths
     f"--distpath={os.path.join(SCRIPT_DIR, 'dist')}",
     f"--workpath={os.path.join(SCRIPT_DIR, 'build')}",
