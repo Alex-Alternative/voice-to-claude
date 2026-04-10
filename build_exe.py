@@ -31,6 +31,7 @@ DATA_FILES = [
     "stats.py",
     "stats_gui.py",
     "plugin_manager.py",
+    "hotkey_service.py",
     "custom_words.json",
     "profiles.json",
 ]

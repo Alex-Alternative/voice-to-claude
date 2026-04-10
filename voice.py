@@ -13,11 +13,12 @@ import sys
 import os
 import time
 import threading
+import multiprocessing
 import logging
 import winsound
 import numpy as np
 import sounddevice as sd
-import keyboard
+import keyboard  # used only for keyboard.send() — hooks run in hotkey_service subprocess
 import pyperclip
 import pyautogui
 import pystray
@@ -64,6 +65,12 @@ overlay = None  # Floating status overlay
 profile_monitor = None  # Per-app profile switcher
 base_config = {}  # Original config before profile overrides
 plugins = PluginManager()  # Plugin system
+
+# --- Hotkey service (separate process) ---
+_hotkey_proc = None       # multiprocessing.Process
+_hotkey_conn = None       # parent end of Pipe
+_hotkey_listener = None   # thread reading events from subprocess
+_hotkey_pong = threading.Event()  # set by event thread when "pong" arrives
 
 
 # ============================================================
@@ -839,87 +846,135 @@ def read_selected():
 # HOTKEYS
 # ============================================================
 
-_registered_release_keys = set()  # Track which release keys are already hooked
 _hotkeys_registered = False  # Track if hotkeys are active
 
 
-def _register_hotkey(hotkey_str, on_press, on_release=None):
-    parts = [p.strip() for p in hotkey_str.split("+")]
-    trigger_key = parts[-1]
-    modifiers = parts[:-1]
+def _hotkey_event_thread():
+    """Read events from the hotkey service subprocess and dispatch them."""
+    global _hotkey_conn
+    logger.info("Hotkey event listener started")
+    while _hotkey_conn is not None:
+        try:
+            if _hotkey_conn.poll(1.0):
+                event = _hotkey_conn.recv()
+            else:
+                continue
+        except (EOFError, OSError):
+            logger.warning("Hotkey service pipe closed")
+            break
+        except Exception as e:
+            logger.error("Hotkey event read error: %s", e)
+            time.sleep(0.5)
+            continue
 
-    try:
-        if modifiers:
-            keyboard.add_hotkey(hotkey_str, on_press, suppress=False)
-            if on_release and trigger_key not in _registered_release_keys:
-                _registered_release_keys.add(trigger_key)
-                keyboard.on_release_key(trigger_key, lambda e: on_release() if recording else None)
-        else:
-            keyboard.on_press_key(trigger_key, lambda e: on_press())
-            if on_release and trigger_key not in _registered_release_keys:
-                _registered_release_keys.add(trigger_key)
-                keyboard.on_release_key(trigger_key, lambda e: on_release() if recording else None)
-        logger.debug("Registered hotkey: %s", hotkey_str)
-    except Exception as e:
-        logger.error("Failed to register hotkey %s: %s", hotkey_str, e)
+        try:
+            if event == "ready":
+                logger.info("Hotkey service reports ready")
+            elif event == "pong":
+                _hotkey_pong.set()  # Signal watchdog that service is responsive
+            elif event == "dictation_press":
+                start_recording("dictation")
+            elif event == "dictation_release":
+                if recording:
+                    threading.Thread(target=stop_recording, daemon=True).start()
+            elif event == "command_press":
+                start_recording("command")
+            elif event == "command_release":
+                if recording:
+                    threading.Thread(target=stop_recording, daemon=True).start()
+            elif event == "dictation_toggle":
+                if recording:
+                    threading.Thread(target=stop_recording, daemon=True).start()
+                else:
+                    start_recording("dictation")
+            elif event == "command_toggle":
+                if recording:
+                    threading.Thread(target=stop_recording, daemon=True).start()
+                else:
+                    start_recording("command")
+            elif event == "correction":
+                threading.Thread(target=undo_and_rerecord, daemon=True).start()
+            elif event == "readback":
+                threading.Thread(target=read_back, daemon=True).start()
+            elif event == "readback_selected":
+                threading.Thread(target=read_selected, daemon=True).start()
+            else:
+                logger.debug("Unknown hotkey event: %s", event)
+        except Exception as e:
+            logger.error("Error dispatching hotkey event %s: %s", event, e)
+
+
+def _build_hotkey_config():
+    """Build the config dict sent to the hotkey service subprocess."""
+    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug.log")
+    return {
+        "hotkey_dictation": config.get("hotkey_dictation", "ctrl+space"),
+        "hotkey_command": config.get("hotkey_command", "ctrl+shift+."),
+        "hotkey_correction": config.get("hotkey_correction", "ctrl+shift+z"),
+        "hotkey_readback": config.get("hotkey_readback", "ctrl+alt+r"),
+        "hotkey_readback_selected": config.get("hotkey_readback_selected", "ctrl+alt+t"),
+        "hotkey_mode": config.get("hotkey_mode", "hold"),
+        "_log_path": log_path,
+    }
+
+
+def _stop_hotkey_service():
+    """Stop the hotkey service subprocess if running."""
+    global _hotkey_proc, _hotkey_conn, _hotkey_listener
+    if _hotkey_conn is not None:
+        try:
+            _hotkey_conn.send("quit")
+        except Exception:
+            pass
+        try:
+            _hotkey_conn.close()
+        except Exception:
+            pass
+        _hotkey_conn = None
+    if _hotkey_proc is not None:
+        try:
+            _hotkey_proc.join(timeout=3)
+        except Exception:
+            pass
+        if _hotkey_proc.is_alive():
+            logger.warning("Hotkey service didn't exit, terminating")
+            _hotkey_proc.terminate()
+        _hotkey_proc = None
+    _hotkey_listener = None
 
 
 def setup_hotkeys():
-    global _hotkeys_registered
-    hotkey_dict = config.get("hotkey_dictation", "ctrl+space")
-    hotkey_cmd = config.get("hotkey_command", "ctrl+shift+.")
-    hotkey_correct = config.get("hotkey_correction", "ctrl+shift+z")
-    mode = config.get("hotkey_mode", "hold")
+    """Start (or restart) the hotkey service subprocess.
 
-    # Clear any existing hooks before re-registering
-    try:
-        keyboard.unhook_all()
-        _registered_release_keys.clear()
-        logger.debug("Cleared existing keyboard hooks")
-    except Exception as e:
-        logger.error("Error clearing keyboard hooks: %s", e)
+    Keyboard hooks run in a dedicated process so they are immune to GIL
+    contention from Whisper transcription in the main process.
+    """
+    global _hotkey_proc, _hotkey_conn, _hotkey_listener, _hotkeys_registered
 
-    if mode == "hold":
-        _register_hotkey(
-            hotkey_dict,
-            on_press=lambda: start_recording("dictation"),
-            on_release=lambda: threading.Thread(target=stop_recording, daemon=True).start(),
-        )
-        _register_hotkey(
-            hotkey_cmd,
-            on_press=lambda: start_recording("command"),
-            on_release=lambda: threading.Thread(target=stop_recording, daemon=True).start(),
-        )
-    else:
-        def toggle_dictation():
-            if recording:
-                threading.Thread(target=stop_recording, daemon=True).start()
-            else:
-                start_recording("dictation")
+    # Stop any existing service first
+    _stop_hotkey_service()
 
-        def toggle_command():
-            if recording:
-                threading.Thread(target=stop_recording, daemon=True).start()
-            else:
-                start_recording("command")
+    from hotkey_service import service_main
 
-        _register_hotkey(hotkey_dict, on_press=toggle_dictation)
-        _register_hotkey(hotkey_cmd, on_press=toggle_command)
+    parent_conn, child_conn = multiprocessing.Pipe()
+    _hotkey_conn = parent_conn
 
-    # Correction hotkey (always available)
-    _register_hotkey(hotkey_correct, on_press=lambda: threading.Thread(
-        target=undo_and_rerecord, daemon=True).start())
+    _hotkey_proc = multiprocessing.Process(
+        target=service_main,
+        args=(child_conn, _build_hotkey_config()),
+        daemon=True,
+        name="koda-hotkey-service",
+    )
+    _hotkey_proc.start()
+    logger.info("Hotkey service process started (pid=%d)", _hotkey_proc.pid)
 
-    # Read-back hotkeys
-    hotkey_read = config.get("hotkey_readback", "ctrl+alt+r")
-    hotkey_read_sel = config.get("hotkey_readback_selected", "ctrl+alt+t")
-    _register_hotkey(hotkey_read, on_press=lambda: threading.Thread(
-        target=read_back, daemon=True).start())
-    _register_hotkey(hotkey_read_sel, on_press=lambda: threading.Thread(
-        target=read_selected, daemon=True).start())
+    # Start event listener thread
+    _hotkey_listener = threading.Thread(target=_hotkey_event_thread, daemon=True)
+    _hotkey_listener.start()
 
     _hotkeys_registered = True
-    logger.info("All hotkeys registered (mode=%s)", mode)
+    logger.info("Hotkey setup complete (subprocess mode, mode=%s)",
+                config.get("hotkey_mode", "hold"))
 
 
 # ============================================================
@@ -954,10 +1009,10 @@ def _watchdog_thread():
                     mem_mb = psutil.Process().memory_info().rss / (1024 * 1024)
                 except Exception:
                     pass
-                hook_count = len(keyboard._hooks) if hasattr(keyboard, '_hooks') else -1
+                hk_pid = _hotkey_proc.pid if _hotkey_proc and _hotkey_proc.is_alive() else 0
                 stream_ok = stream.active if stream else False
-                logger.info("Watchdog heartbeat: hooks=%d stream=%s mem=%.0fMB",
-                            hook_count, stream_ok, mem_mb)
+                logger.info("Watchdog heartbeat: hotkey_pid=%d stream=%s mem=%.0fMB",
+                            hk_pid, stream_ok, mem_mb)
 
             # Check audio stream health
             if stream and not stream.active:
@@ -975,24 +1030,36 @@ def _watchdog_thread():
                     error_notify("Microphone disconnected. Check your mic and restart Koda.")
                     update_tray("#e74c3c", "Koda: Mic error")
 
-            # Check keyboard hooks are alive
-            # Windows silently drops low-level hooks if the hook thread can't respond
-            # fast enough (e.g., during CPU-intensive Whisper transcription via GIL)
-            try:
-                hook_count = len(keyboard._hooks) if hasattr(keyboard, '_hooks') else -1
-                if hook_count == 0 and _hotkeys_registered:
-                    logger.warning("Keyboard hooks lost (count=%d) — re-registering", hook_count)
-                    setup_hotkeys()
-                    error_notify("Hotkeys recovered automatically. You're good to go.")
-                    update_tray("#2ecc71", "Koda: Ready (recovered)")
-            except Exception as e:
-                logger.error("Hook health check error: %s", e)
-                # If we can't even check hooks, force re-register
+            # Check hotkey service subprocess is alive
+            # With hooks in a separate process, the GIL issue is eliminated.
+            # We just need to ensure the subprocess hasn't crashed.
+            if _hotkeys_registered and _hotkey_proc is not None:
                 try:
-                    setup_hotkeys()
-                    logger.info("Force re-registered hotkeys after check error")
-                except Exception:
-                    pass
+                    if not _hotkey_proc.is_alive():
+                        logger.warning("Hotkey service process died (exitcode=%s) — restarting",
+                                       _hotkey_proc.exitcode)
+                        setup_hotkeys()
+                        error_notify("Hotkeys recovered automatically. You're good to go.")
+                        update_tray("#2ecc71", "Koda: Ready (recovered)")
+                    elif check_count % 4 == 0 and _hotkey_conn is not None:
+                        # Ping the service every ~60s to verify it's responsive
+                        try:
+                            _hotkey_pong.clear()
+                            _hotkey_conn.send("ping")
+                            if not _hotkey_pong.wait(timeout=3.0):
+                                logger.warning("Hotkey service not responding to ping — restarting")
+                                setup_hotkeys()
+                                error_notify("Hotkeys recovered automatically. You're good to go.")
+                        except Exception as e:
+                            logger.error("Hotkey ping error: %s — restarting", e)
+                            setup_hotkeys()
+                except Exception as e:
+                    logger.error("Hotkey health check error: %s", e)
+                    try:
+                        setup_hotkeys()
+                        logger.info("Force restarted hotkey service after check error")
+                    except Exception:
+                        pass
 
         except Exception as e:
             logger.error("Watchdog error: %s", e)
@@ -1340,11 +1407,10 @@ def _open_profiles():
 
 
 def switch_mode(icon, item):
-    keyboard.unhook_all()
     current = config.get("hotkey_mode", "hold")
     config["hotkey_mode"] = "toggle" if current == "hold" else "hold"
     save_config(config)
-    setup_hotkeys()
+    setup_hotkeys()  # restarts the hotkey service subprocess with new mode
     icon.menu = build_menu()
 
 
@@ -1357,10 +1423,7 @@ def on_quit(icon, item):
     logger.info("Koda shutting down")
     _watchdog_running = False
     wake_word_active = False
-    try:
-        keyboard.unhook_all()
-    except Exception as e:
-        logger.error("Error unhooking keyboard: %s", e)
+    _stop_hotkey_service()
     if plugins.loaded:
         plugins.unload_all()
     if profile_monitor:
@@ -1505,4 +1568,5 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()
