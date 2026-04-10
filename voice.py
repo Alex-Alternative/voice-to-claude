@@ -59,101 +59,33 @@ base_config = {}  # Original config before profile overrides
 # ============================================================
 
 def create_icon(color="gray"):
-    """Create a branded K + soundwave icon for the system tray.
+    """Bold, simple tray icon — entire square IS the state color with white mic.
 
-    Rounded square with bold 'K' that has sound wave bars integrated
-    into its right side. Signature Koda green (#2ecc71) base.
-    State color shows as a small dot indicator.
+    At 16px tray size, details vanish. So the whole icon is the color:
+    bright green = ready, red = recording, orange = processing, etc.
+    Big bold white mic inside. Impossible to miss.
     """
     size = 64
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Rounded square background — always Koda green base for brand consistency
-    base = "#2ecc71"
-    border_color = _darken(base, 0.7)
-    draw.rounded_rectangle([0, 0, 63, 63], radius=14, fill=border_color)
-    draw.rounded_rectangle([2, 2, 61, 61], radius=13, fill=base)
+    # Entire rounded square is the state color — bold and obvious
+    draw.rounded_rectangle([0, 0, 63, 63], radius=14, fill=color)
 
-    # Subtle top highlight for depth
-    highlight = _lighten(base, 1.2)
-    draw.rounded_rectangle([4, 3, 59, 22], radius=10, fill=highlight)
-    draw.rounded_rectangle([2, 16, 61, 61], radius=10, fill=base)
-
-    # Bold K letterform (white)
+    # White mic — thick and chunky so it reads at small sizes
     W = "white"
-    # Left vertical stroke
-    draw.rounded_rectangle([14, 12, 20, 50], radius=2, fill=W)
-    # Upper diagonal (K arm)
-    for i in range(12):
-        x = 20 + i
-        y1 = 30 - i
-        draw.line([x, y1, x, y1 + 5], fill=W, width=1)
-    # Lower diagonal (K leg)
-    for i in range(12):
-        x = 20 + i
-        y1 = 31 + i
-        draw.line([x, y1, x, y1 + 5], fill=W, width=1)
-
-    # Sound wave bars (right side, integrated with K)
-    bar_x = 36
-    bar_heights = [8, 16, 12, 6]
-    cy = 31
-    for i, h in enumerate(bar_heights):
-        x = bar_x + i * 5
-        draw.rounded_rectangle([x, cy - h // 2, x + 3, cy + h // 2], radius=1, fill=W)
-
-    # State indicator dot (bottom-right corner)
-    if color != "#2ecc71" and color != "gray":
-        dot_r = 7
-        dot_cx, dot_cy = 54, 54
-        # Dark ring for visibility
-        draw.ellipse([dot_cx - dot_r - 1, dot_cy - dot_r - 1,
-                      dot_cx + dot_r + 1, dot_cy + dot_r + 1], fill=border_color)
-        draw.ellipse([dot_cx - dot_r, dot_cy - dot_r,
-                      dot_cx + dot_r, dot_cy + dot_r], fill=color)
-    elif color == "gray":
-        # Gray state — dim the whole icon
-        draw.rounded_rectangle([2, 2, 61, 61], radius=13, fill=(80, 80, 80))
-        # Redraw K and waves in dimmer white
-        DIM = (160, 160, 160)
-        draw.rounded_rectangle([14, 12, 20, 50], radius=2, fill=DIM)
-        for i in range(12):
-            x = 20 + i
-            draw.line([x, 30 - i, x, 35 - i], fill=DIM, width=1)
-            draw.line([x, 31 + i, x, 36 + i], fill=DIM, width=1)
-        for i, h in enumerate(bar_heights):
-            x = bar_x + i * 5
-            draw.rounded_rectangle([x, cy - h // 2, x + 3, cy + h // 2], radius=1, fill=DIM)
+    # Mic body
+    draw.rounded_rectangle([23, 12, 41, 34], radius=9, fill=W)
+    # Cradle arc
+    draw.arc([15, 22, 49, 50], start=0, end=180, fill=W, width=4)
+    # Stand
+    draw.line([32, 50, 32, 56], fill=W, width=3)
+    # Base
+    draw.line([23, 56, 41, 56], fill=W, width=3)
 
     return img
 
 
-def _darken(color, factor):
-    """Darken a color by a factor (0-1)."""
-    if isinstance(color, str):
-        if color.startswith("#"):
-            r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
-        else:
-            # Named colors
-            _named = {"gray": (128, 128, 128), "red": (231, 76, 60)}
-            r, g, b = _named.get(color, (128, 128, 128))
-    else:
-        r, g, b = color
-    return (int(r * factor), int(g * factor), int(b * factor))
-
-
-def _lighten(color, factor):
-    """Lighten a color by a factor (>1)."""
-    if isinstance(color, str):
-        if color.startswith("#"):
-            r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
-        else:
-            _named = {"gray": (128, 128, 128), "red": (231, 76, 60)}
-            r, g, b = _named.get(color, (128, 128, 128))
-    else:
-        r, g, b = color
-    return (min(255, int(r * factor)), min(255, int(g * factor)), min(255, int(b * factor)))
 
 
 # ============================================================

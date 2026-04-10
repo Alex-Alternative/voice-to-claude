@@ -137,11 +137,8 @@ class KodaOverlay:
 
             self._canvas.itemconfig(self._dot_id, fill=color)
 
-            # Opacity
-            if self._state == "ready":
-                self._root.attributes("-alpha", self._opacity * 0.7)
-            else:
-                self._root.attributes("-alpha", self._opacity)
+            # Full opacity always — user wants it visible
+            self._root.attributes("-alpha", self._opacity)
 
             interval = 400 if self._state == "recording" else 300
             self._root.after(interval, self._poll)
