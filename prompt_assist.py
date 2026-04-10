@@ -114,82 +114,195 @@ def _clean_for_prompt(text):
 
 
 # ============================================================
+# DETAIL EXTRACTION
+# ============================================================
+
+def _extract_details(text):
+    """Extract specific details from speech that should be preserved in the prompt.
+
+    Returns a dict of extracted detail categories. Empty categories are omitted.
+    """
+    details = {}
+    lower = text.lower()
+
+    # Colors
+    color_pattern = r"\b(red|blue|green|yellow|orange|purple|pink|black|white|gray|grey|navy|teal|cyan|magenta|gold|silver|dark\s+\w+|light\s+\w+)\b"
+    colors = list(set(re.findall(color_pattern, lower)))
+    if colors:
+        details["colors"] = colors
+
+    # Numbers with context (e.g. "21 people", "10 years", "500 users")
+    number_phrases = re.findall(
+        r"\b(\d+(?:,\d{3})*(?:\.\d+)?)\s*(people|employees|users|customers|clients|"
+        r"years?|months?|weeks?|days?|hours?|pages?|items?|records?|rows?|"
+        r"percent|%|dollars?|bucks|\$|MB|GB|TB|ms|seconds?|minutes?)\b",
+        lower
+    )
+    if number_phrases:
+        details["quantities"] = [f"{num} {unit}" for num, unit in number_phrases]
+
+    # Company/brand names — capitalized multi-word phrases that aren't common words
+    _common_starts = {"i", "the", "a", "an", "it", "we", "they", "he", "she", "my",
+                      "this", "that", "what", "how", "why", "when", "where", "which",
+                      "please", "help", "make", "create", "build", "write", "fix",
+                      "and", "but", "or", "for", "with", "from", "about", "also",
+                      "maybe", "probably", "definitely", "actually", "basically"}
+    # Look for capitalized phrases in the ORIGINAL text (not lowered)
+    cap_phrases = re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b", text)
+    names = [p for p in cap_phrases if p.split()[0].lower() not in _common_starts]
+    if names:
+        details["names"] = list(set(names))
+
+    # Specific technologies/frameworks (beyond just language detection)
+    tech_patterns = {
+        r"\breact\b": "React", r"\bnext\.?js\b": "Next.js", r"\bvue\b": "Vue",
+        r"\bangular\b": "Angular", r"\bsvelte\b": "Svelte", r"\bdjango\b": "Django",
+        r"\bflask\b": "Flask", r"\bfastapi\b": "FastAPI", r"\bexpress\b": "Express",
+        r"\bnode\.?js\b": "Node.js", r"\btailwind\b": "Tailwind CSS",
+        r"\bbootstrap\b": "Bootstrap", r"\bpostgres\w*\b": "PostgreSQL",
+        r"\bmongo\w*\b": "MongoDB", r"\bredis\b": "Redis", r"\bsupabase\b": "Supabase",
+        r"\bfirebase\b": "Firebase", r"\baws\b": "AWS", r"\bazure\b": "Azure",
+        r"\bdocker\b": "Docker", r"\bkubernetes\b": "Kubernetes",
+        r"\bgraphql\b": "GraphQL", r"\brest\s*api\b": "REST API",
+        r"\boauth\b": "OAuth", r"\bjwt\b": "JWT", r"\bwebsocket\b": "WebSocket",
+        r"\bshadcn\b": "shadcn/ui", r"\bprisma\b": "Prisma", r"\bdrizzle\b": "Drizzle",
+    }
+    techs = []
+    for pattern, name in tech_patterns.items():
+        if re.search(pattern, lower):
+            techs.append(name)
+    if techs:
+        details["technologies"] = techs
+
+    # URLs and domains
+    urls = re.findall(r"https?://\S+|www\.\S+|\b\w+\.(com|org|io|dev|net|app)\b", text)
+    if urls:
+        details["urls"] = [u if isinstance(u, str) else u[0] for u in urls]
+
+    # File types and paths
+    files = re.findall(r"\b[\w/\\]+\.(?:py|js|ts|tsx|jsx|json|csv|sql|html|css|md|yaml|yml|env|txt)\b", text)
+    if files:
+        details["files"] = list(set(files))
+
+    return details
+
+
+def _format_details(details):
+    """Format extracted details into a concise context block."""
+    if not details:
+        return ""
+
+    lines = []
+    if "names" in details:
+        lines.append(f"Names/brands: {', '.join(details['names'])}")
+    if "quantities" in details:
+        lines.append(f"Key numbers: {', '.join(details['quantities'])}")
+    if "colors" in details:
+        lines.append(f"Colors: {', '.join(details['colors'])}")
+    if "technologies" in details:
+        lines.append(f"Tech stack: {', '.join(details['technologies'])}")
+    if "files" in details:
+        lines.append(f"Files: {', '.join(details['files'])}")
+    if "urls" in details:
+        lines.append(f"URLs: {', '.join(details['urls'])}")
+
+    return "\n".join(lines)
+
+
+# ============================================================
 # PROMPT TEMPLATES
 # ============================================================
 
-def _template_code(cleaned, language):
+def _template_code(cleaned, language, context):
     """Structure a code request into a clear prompt."""
-    lang_line = f"\n\nLanguage: {language}" if language else ""
-    return (
-        f"{cleaned}{lang_line}\n\n"
-        "Requirements:\n"
+    parts = [cleaned]
+    if language:
+        parts.append(f"\nLanguage: {language}")
+    if context:
+        parts.append(f"\nContext:\n{context}")
+    parts.append(
+        "\nRequirements:\n"
         "- Write complete, working code\n"
-        "- Include brief comments for clarity\n"
         "- Handle edge cases\n"
-        "- Follow best practices and conventions"
+        "- Follow best practices"
     )
+    return "\n".join(parts)
 
 
-def _template_debug(cleaned, language):
+def _template_debug(cleaned, language, context):
     """Structure a debug request into a clear prompt."""
-    lang_line = f"\n\nLanguage/stack: {language}" if language else ""
-    return (
-        f"I need help debugging an issue.\n\n"
-        f"Problem: {cleaned}{lang_line}\n\n"
-        "Please:\n"
+    parts = [f"I need help debugging an issue.\n\nProblem: {cleaned}"]
+    if language:
+        parts.append(f"\nLanguage/stack: {language}")
+    if context:
+        parts.append(f"\nContext:\n{context}")
+    parts.append(
+        "\nPlease:\n"
         "1. Identify the likely root cause\n"
         "2. Explain why it's happening\n"
         "3. Provide the fix with code\n"
         "4. Suggest how to prevent it in the future"
     )
+    return "\n".join(parts)
 
 
-def _template_explain(cleaned, language):
+def _template_explain(cleaned, language, context):
     """Structure an explanation request."""
-    return (
-        f"{cleaned}\n\n"
-        "Please explain:\n"
+    parts = [cleaned]
+    if context:
+        parts.append(f"\nContext:\n{context}")
+    parts.append(
+        "\nPlease explain:\n"
         "- What it is and why it matters\n"
         "- How it works (with examples)\n"
         "- Common pitfalls or misconceptions\n"
         "- When to use it vs alternatives"
     )
+    return "\n".join(parts)
 
 
-def _template_review(cleaned, language):
+def _template_review(cleaned, language, context):
     """Structure a code review request."""
-    lang_line = f"\n\nLanguage: {language}" if language else ""
-    return (
-        f"{cleaned}{lang_line}\n\n"
-        "Review for:\n"
+    parts = [cleaned]
+    if language:
+        parts.append(f"\nLanguage: {language}")
+    if context:
+        parts.append(f"\nContext:\n{context}")
+    parts.append(
+        "\nReview for:\n"
         "- Bugs or logic errors\n"
         "- Security vulnerabilities\n"
         "- Performance issues\n"
-        "- Code clarity and maintainability\n"
-        "- Best practice violations\n\n"
+        "- Code clarity and maintainability\n\n"
         "Prioritize findings by severity."
     )
+    return "\n".join(parts)
 
 
-def _template_write(cleaned, language):
+def _template_write(cleaned, language, context):
     """Structure a writing/drafting request."""
-    return (
-        f"{cleaned}\n\n"
-        "Guidelines:\n"
+    parts = [cleaned]
+    if context:
+        parts.append(f"\nContext:\n{context}")
+    parts.append(
+        "\nGuidelines:\n"
         "- Match the appropriate tone and formality\n"
         "- Be clear and concise\n"
-        "- Structure with logical flow\n"
-        "- Proofread for grammar and clarity"
+        "- Structure with logical flow"
     )
+    return "\n".join(parts)
 
 
-def _template_general(cleaned, language):
+def _template_general(cleaned, language, context):
     """Structure a general request with good prompt practices."""
-    return (
-        f"{cleaned}\n\n"
-        "Please be specific and thorough in your response. "
+    parts = [cleaned]
+    if context:
+        parts.append(f"\nContext:\n{context}")
+    parts.append(
+        "\nPlease be specific and thorough in your response. "
         "If you need clarification on anything, ask before proceeding."
     )
+    return "\n".join(parts)
 
 
 _TEMPLATES = {
@@ -262,15 +375,17 @@ def refine_prompt(raw_speech, config):
     if not cleaned:
         return raw_speech
 
-    # Step 2: Detect intent
+    # Step 2: Detect intent and extract details
     intent = detect_intent(raw_speech)  # use raw speech for better detection
     language = _extract_language(raw_speech)
+    details = _extract_details(raw_speech)
+    context = _format_details(details)
 
-    logger.debug("Prompt assist: intent=%s, language=%s", intent, language)
+    logger.debug("Prompt assist: intent=%s, language=%s, details=%s", intent, language, list(details.keys()))
 
-    # Step 3: Apply template
+    # Step 3: Apply template with extracted context
     template_fn = _TEMPLATES.get(intent, _template_general)
-    structured = template_fn(cleaned, language)
+    structured = template_fn(cleaned, language, context)
 
     # Step 4: Optional LLM refinement
     pa_config = config.get("prompt_assist", {})

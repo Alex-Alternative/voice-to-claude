@@ -536,5 +536,93 @@ class TestUpdater(unittest.TestCase):
         self.assertEqual(img.size, (64, 64))
 
 
+class TestPromptAssist(unittest.TestCase):
+    """Tests for Prompt Assist intent detection and detail extraction."""
+
+    def test_intent_code(self):
+        from prompt_assist import detect_intent
+        self.assertEqual(detect_intent("build me a React landing page"), "code")
+        self.assertEqual(detect_intent("create a Python script to parse CSV"), "code")
+
+    def test_intent_debug(self):
+        from prompt_assist import detect_intent
+        self.assertEqual(detect_intent("my script crashes with a KeyError"), "debug")
+        self.assertEqual(detect_intent("this function is not working"), "debug")
+
+    def test_intent_write(self):
+        from prompt_assist import detect_intent
+        self.assertEqual(detect_intent("write an email to our clients"), "write")
+        self.assertEqual(detect_intent("draft a blog post about AI"), "write")
+
+    def test_intent_explain(self):
+        from prompt_assist import detect_intent
+        self.assertEqual(detect_intent("explain how async await works"), "explain")
+        self.assertEqual(detect_intent("what is a closure in JavaScript"), "explain")
+
+    def test_intent_review(self):
+        from prompt_assist import detect_intent
+        self.assertEqual(detect_intent("review this code for security issues"), "review")
+
+    def test_intent_general(self):
+        from prompt_assist import detect_intent
+        self.assertEqual(detect_intent("what should I have for lunch"), "general")
+
+    def test_extract_colors(self):
+        from prompt_assist import _extract_details
+        d = _extract_details("Make it blue and green with a dark red header")
+        self.assertIn("colors", d)
+        self.assertIn("blue", d["colors"])
+        self.assertIn("green", d["colors"])
+
+    def test_extract_quantities(self):
+        from prompt_assist import _extract_details
+        d = _extract_details("We have 21 people and have been around for 10 years")
+        self.assertIn("quantities", d)
+        self.assertIn("21 people", d["quantities"])
+        self.assertIn("10 years", d["quantities"])
+
+    def test_extract_names(self):
+        from prompt_assist import _extract_details
+        d = _extract_details("Build a site for Alternative Funding Group")
+        self.assertIn("names", d)
+        self.assertIn("Alternative Funding Group", d["names"])
+
+    def test_extract_technologies(self):
+        from prompt_assist import _extract_details
+        d = _extract_details("Use React and Tailwind with a Supabase backend")
+        self.assertIn("technologies", d)
+        self.assertIn("React", d["technologies"])
+        self.assertIn("Tailwind CSS", d["technologies"])
+        self.assertIn("Supabase", d["technologies"])
+
+    def test_extract_files(self):
+        from prompt_assist import _extract_details
+        d = _extract_details("It crashes when reading config.json and writing output.csv")
+        self.assertIn("files", d)
+        self.assertIn("config.json", d["files"])
+        self.assertIn("output.csv", d["files"])
+
+    def test_details_in_output(self):
+        from prompt_assist import refine_prompt
+        result = refine_prompt(
+            "Build a landing page for Alternative Funding Group with React and Tailwind, dark blue and gold, we have 500 customers",
+            {}
+        )
+        self.assertIn("Alternative Funding Group", result)
+        self.assertIn("500 customers", result)
+        self.assertIn("dark blue", result)
+        self.assertIn("React", result)
+
+    def test_empty_input(self):
+        from prompt_assist import refine_prompt
+        self.assertEqual(refine_prompt("", {}), "")
+        self.assertIsNone(refine_prompt(None, {}))
+
+    def test_no_details_still_works(self):
+        from prompt_assist import refine_prompt
+        result = refine_prompt("What should I do next", {})
+        self.assertIn("What should I do next", result)
+
+
 if __name__ == "__main__":
     unittest.main()
