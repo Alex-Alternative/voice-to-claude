@@ -1015,10 +1015,56 @@ def setup_hotkeys():
 _watchdog_running = False
 
 
+def _restart_audio_stream():
+    """Fully tear down and recreate the audio stream."""
+    global stream
+    try:
+        if stream:
+            stream.stop()
+            stream.close()
+    except Exception:
+        pass
+    mic_device = config.get("mic_device")
+    stream = sd.InputStream(
+        samplerate=16000,
+        channels=1,
+        dtype="float32",
+        device=mic_device,
+        callback=audio_callback,
+    )
+    stream.start()
+    logger.info("Audio stream restarted successfully")
+
+
+def _full_recovery(reason):
+    """Force-restart audio stream + hotkey service after sleep/wake or lock/unlock."""
+    logger.warning("Full recovery triggered: %s", reason)
+    update_tray("gray", "Koda: Recovering...")
+
+    # Restart audio — devices reset after sleep
+    try:
+        _restart_audio_stream()
+    except Exception as e:
+        logger.error("Audio recovery failed: %s", e)
+        error_notify("Microphone error after wake. Check your mic.")
+        update_tray("#e74c3c", "Koda: Mic error")
+        return
+
+    # Restart hotkey service — hooks die after sleep/lock
+    try:
+        setup_hotkeys()
+    except Exception as e:
+        logger.error("Hotkey recovery failed: %s", e)
+
+    update_tray("#2ecc71", "Koda: Ready")
+    logger.info("Full recovery complete (%s)", reason)
+
+
 def _watchdog_thread():
     """Monitor Koda's health and auto-recover from failures.
 
     Checks every 15 seconds:
+    - Detects sleep/wake via time gaps (>30s gap = system was asleep)
     - Audio stream is active
     - Keyboard hooks are alive (re-registers if dead)
     - Logs heartbeat every 5 minutes for diagnostics
@@ -1026,12 +1072,25 @@ def _watchdog_thread():
     global _watchdog_running
     _watchdog_running = True
     check_count = 0
+    last_check_time = time.monotonic()
     logger.info("Watchdog started")
 
     while _watchdog_running:
         time.sleep(15)
         check_count += 1
+
+        now = time.monotonic()
+        elapsed = now - last_check_time
+        last_check_time = now
+
         try:
+            # Detect sleep/wake: if 15s sleep took >30s wall time, system was asleep
+            if elapsed > 30:
+                logger.warning("Sleep/wake detected (expected 15s, got %.0fs) — full recovery", elapsed)
+                time.sleep(2)  # Brief pause for hardware to stabilize
+                _full_recovery(f"sleep/wake, gap={elapsed:.0f}s")
+                continue
+
             # Heartbeat every 5 minutes (20 checks at 15s intervals)
             if check_count % 20 == 0:
                 mem_mb = 0
@@ -1049,12 +1108,7 @@ def _watchdog_thread():
             if stream and not stream.active:
                 logger.warning("Audio stream died — restarting")
                 try:
-                    stream.stop()
-                except Exception:
-                    pass
-                try:
-                    stream.start()
-                    logger.info("Audio stream restarted successfully")
+                    _restart_audio_stream()
                     error_notify("Microphone recovered automatically.")
                 except Exception as e:
                     logger.error("Failed to restart audio stream: %s", e)
@@ -1062,8 +1116,6 @@ def _watchdog_thread():
                     update_tray("#e74c3c", "Koda: Mic error")
 
             # Check hotkey service subprocess is alive
-            # With hooks in a separate process, the GIL issue is eliminated.
-            # We just need to ensure the subprocess hasn't crashed.
             if _hotkeys_registered and _hotkey_proc is not None:
                 try:
                     if not _hotkey_proc.is_alive():
