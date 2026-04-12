@@ -623,6 +623,158 @@ class TestPromptAssist(unittest.TestCase):
         result = refine_prompt("What should I do next", {})
         self.assertIn("What should I do next", result)
 
+    # ------------------------------------------------------------------
+    # _clean_for_prompt
+    # ------------------------------------------------------------------
+
+    def test_clean_strips_leading_okay_so(self):
+        from prompt_assist import _clean_for_prompt
+        result = _clean_for_prompt("okay so help me write a function")
+        self.assertFalse(result.lower().startswith("okay"))
+
+    def test_clean_strips_leading_um(self):
+        from prompt_assist import _clean_for_prompt
+        result = _clean_for_prompt("um explain closures")
+        self.assertFalse(result.lower().startswith("um"))
+
+    def test_clean_strips_trailing_please(self):
+        from prompt_assist import _clean_for_prompt
+        result = _clean_for_prompt("fix this bug please")
+        self.assertNotIn("please", result)
+
+    def test_clean_strips_trailing_thank_you(self):
+        from prompt_assist import _clean_for_prompt
+        result = _clean_for_prompt("explain closures thank you")
+        self.assertNotIn("thank you", result)
+
+    def test_clean_adds_period_if_missing(self):
+        from prompt_assist import _clean_for_prompt
+        result = _clean_for_prompt("explain closures")
+        self.assertTrue(result.endswith("."))
+
+    def test_clean_preserves_question_mark(self):
+        from prompt_assist import _clean_for_prompt
+        result = _clean_for_prompt("what is a closure?")
+        self.assertTrue(result.endswith("?"))
+
+    def test_clean_preserves_exclamation(self):
+        from prompt_assist import _clean_for_prompt
+        result = _clean_for_prompt("this is broken!")
+        self.assertTrue(result.endswith("!"))
+
+    def test_clean_collapses_whitespace(self):
+        from prompt_assist import _clean_for_prompt
+        result = _clean_for_prompt("fix   this   bug")
+        self.assertNotIn("  ", result)
+
+    def test_clean_empty_string_returns_empty(self):
+        from prompt_assist import _clean_for_prompt
+        self.assertEqual(_clean_for_prompt(""), "")
+
+    # ------------------------------------------------------------------
+    # _extract_language
+    # ------------------------------------------------------------------
+
+    def test_extract_language_python(self):
+        from prompt_assist import _extract_language
+        self.assertEqual(_extract_language("write a Python script"), "Python")
+
+    def test_extract_language_javascript(self):
+        from prompt_assist import _extract_language
+        self.assertEqual(_extract_language("build a javascript function"), "JavaScript")
+
+    def test_extract_language_typescript(self):
+        from prompt_assist import _extract_language
+        self.assertEqual(_extract_language("TypeScript component for React"), "TypeScript")
+
+    def test_extract_language_sql(self):
+        from prompt_assist import _extract_language
+        self.assertEqual(_extract_language("optimize this SQL query"), "SQL")
+
+    def test_extract_language_none(self):
+        from prompt_assist import _extract_language
+        self.assertIsNone(_extract_language("help me write an email"))
+
+    # ------------------------------------------------------------------
+    # _format_details
+    # ------------------------------------------------------------------
+
+    def test_format_details_empty_returns_empty_string(self):
+        from prompt_assist import _format_details
+        self.assertEqual(_format_details({}), "")
+
+    def test_format_details_includes_all_categories(self):
+        from prompt_assist import _format_details
+        details = {
+            "names": ["Acme Corp"],
+            "quantities": ["10 users"],
+            "technologies": ["React"],
+            "files": ["app.py"],
+        }
+        result = _format_details(details)
+        self.assertIn("Acme Corp", result)
+        self.assertIn("10 users", result)
+        self.assertIn("React", result)
+        self.assertIn("app.py", result)
+
+    # ------------------------------------------------------------------
+    # Intent priority ordering
+    # ------------------------------------------------------------------
+
+    def test_intent_debug_beats_code(self):
+        # "fix" is a debug signal; should not fall through to code
+        from prompt_assist import detect_intent
+        self.assertEqual(detect_intent("fix this Python function that returns wrong value"), "debug")
+
+    def test_intent_review_beats_code(self):
+        from prompt_assist import detect_intent
+        self.assertEqual(detect_intent("review this Python code for bugs"), "review")
+
+    # ------------------------------------------------------------------
+    # Template structure
+    # ------------------------------------------------------------------
+
+    def test_code_template_has_requirements(self):
+        from prompt_assist import refine_prompt
+        result = refine_prompt("build a Python script to read CSV files", {})
+        self.assertIn("Requirements:", result)
+        self.assertIn("best practices", result)
+
+    def test_debug_template_mentions_root_cause(self):
+        from prompt_assist import refine_prompt
+        result = refine_prompt("my function crashes with a KeyError on startup", {})
+        self.assertIn("root cause", result)
+
+    def test_explain_template_asks_for_examples(self):
+        from prompt_assist import refine_prompt
+        result = refine_prompt("explain how closures work in JavaScript", {})
+        self.assertIn("examples", result)
+
+    def test_review_template_mentions_severity(self):
+        from prompt_assist import refine_prompt
+        result = refine_prompt("review this code for security issues", {})
+        self.assertIn("severity", result)
+
+    def test_write_template_mentions_tone(self):
+        from prompt_assist import refine_prompt
+        result = refine_prompt("draft an email to our clients about the update", {})
+        self.assertIn("tone", result)
+
+    # ------------------------------------------------------------------
+    # Edge cases
+    # ------------------------------------------------------------------
+
+    def test_whitespace_only_returns_input(self):
+        from prompt_assist import refine_prompt
+        self.assertEqual(refine_prompt("   ", {}), "   ")
+
+    def test_llm_refine_false_skips_ollama(self):
+        from prompt_assist import refine_prompt
+        config = {"prompt_assist": {"llm_refine": False}}
+        result = refine_prompt("explain Python decorators", config)
+        self.assertIsNotNone(result)
+        self.assertIn("explain", result.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
