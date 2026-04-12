@@ -490,6 +490,8 @@ def _wake_word_loop():
 # ============================================================
 
 def audio_callback(indata, frames, time_info, status):
+    if status:
+        logger.warning("Audio stream status: %s", status)
     if recording:
         audio_chunks.append(indata.copy())
     # Always feed wake word buffer (when not recording)
@@ -1038,7 +1040,7 @@ _watchdog_running = False
 
 
 def _restart_audio_stream():
-    """Fully tear down and recreate the audio stream."""
+    """Fully tear down and recreate the audio stream. Retries 3x for USB re-enumeration."""
     global stream
     try:
         if stream:
@@ -1047,15 +1049,26 @@ def _restart_audio_stream():
     except Exception:
         pass
     mic_device = config.get("mic_device")
-    stream = sd.InputStream(
-        samplerate=16000,
-        channels=1,
-        dtype="float32",
-        device=mic_device,
-        callback=audio_callback,
-    )
-    stream.start()
-    logger.info("Audio stream restarted successfully")
+    last_err = None
+    for attempt in range(3):
+        try:
+            stream = sd.InputStream(
+                samplerate=16000,
+                channels=1,
+                dtype="float32",
+                device=mic_device,
+                callback=audio_callback,
+            )
+            stream.start()
+            logger.info("Audio stream restarted successfully (attempt %d)", attempt + 1)
+            return True
+        except Exception as e:
+            last_err = e
+            logger.warning("Audio stream restart attempt %d failed: %s", attempt + 1, e)
+            if attempt < 2:
+                time.sleep(2)
+    logger.error("Audio stream restart failed after 3 attempts: %s", last_err)
+    return False
 
 
 def _full_recovery(reason):
@@ -1065,9 +1078,11 @@ def _full_recovery(reason):
 
     # Restart audio — devices reset after sleep
     try:
-        _restart_audio_stream()
+        ok = _restart_audio_stream()
     except Exception as e:
+        ok = False
         logger.error("Audio recovery failed: %s", e)
+    if not ok:
         error_notify("Microphone error after wake. Check your mic.")
         update_tray("#e74c3c", "Koda: Mic error")
         return
@@ -1085,36 +1100,55 @@ def _full_recovery(reason):
 def _watchdog_thread():
     """Monitor Koda's health and auto-recover from failures.
 
-    Checks every 15 seconds:
-    - Detects sleep/wake via time gaps (>30s gap = system was asleep)
-    - Audio stream is active
-    - Keyboard hooks are alive (re-registers if dead)
-    - Logs heartbeat every 5 minutes for diagnostics
+    Stream health checked every 3 seconds for fast mic disconnect detection.
+    Sleep/wake detection and hotkey health checked every 15 seconds.
+    Heartbeat logged every 5 minutes.
     """
     global _watchdog_running
     _watchdog_running = True
     check_count = 0
-    last_check_time = time.monotonic()
+    last_15s_time = time.monotonic()
+    last_heartbeat_time = time.monotonic()
     logger.info("Watchdog started")
 
     while _watchdog_running:
-        time.sleep(15)
-        check_count += 1
+        time.sleep(3)
 
         now = time.monotonic()
-        elapsed = now - last_check_time
-        last_check_time = now
 
         try:
-            # Detect sleep/wake: if 15s sleep took >30s wall time, system was asleep
-            if elapsed > 30:
-                logger.warning("Sleep/wake detected (expected 15s, got %.0fs) — full recovery", elapsed)
+            # --- Fast path: stream health every 3s ---
+            if stream and not stream.active:
+                logger.warning("Audio stream died — restarting")
+                ok = False
+                try:
+                    ok = _restart_audio_stream()
+                except Exception as e:
+                    logger.error("Failed to restart audio stream: %s", e)
+                if ok:
+                    error_notify("Microphone recovered automatically.")
+                else:
+                    error_notify("Microphone disconnected. Check your mic and restart Koda.")
+                    update_tray("#e74c3c", "Koda: Mic error")
+
+            # --- Slow path: every ~15s ---
+            elapsed_15 = now - last_15s_time
+            if elapsed_15 < 15:
+                continue
+            check_count += 1
+            last_15s_time = now
+
+            # Detect sleep/wake: expected ~15s, >30s means system was asleep
+            if elapsed_15 > 30:
+                logger.warning("Sleep/wake detected (expected 15s, got %.0fs) — full recovery", elapsed_15)
                 time.sleep(2)  # Brief pause for hardware to stabilize
-                _full_recovery(f"sleep/wake, gap={elapsed:.0f}s")
+                _full_recovery(f"sleep/wake, gap={elapsed_15:.0f}s")
+                last_15s_time = time.monotonic()
                 continue
 
-            # Heartbeat every 5 minutes (20 checks at 15s intervals)
-            if check_count % 20 == 0:
+            # Heartbeat every 5 minutes
+            if now - last_heartbeat_time >= 300:
+                last_heartbeat_time = now
                 mem_mb = 0
                 try:
                     import psutil
@@ -1125,17 +1159,6 @@ def _watchdog_thread():
                 stream_ok = stream.active if stream else False
                 logger.info("Watchdog heartbeat: hotkey_pid=%d stream=%s mem=%.0fMB",
                             hk_pid, stream_ok, mem_mb)
-
-            # Check audio stream health
-            if stream and not stream.active:
-                logger.warning("Audio stream died — restarting")
-                try:
-                    _restart_audio_stream()
-                    error_notify("Microphone recovered automatically.")
-                except Exception as e:
-                    logger.error("Failed to restart audio stream: %s", e)
-                    error_notify("Microphone disconnected. Check your mic and restart Koda.")
-                    update_tray("#e74c3c", "Koda: Mic error")
 
             # Check hotkey service subprocess is alive
             if _hotkeys_registered and _hotkey_proc is not None:
@@ -1628,14 +1651,18 @@ def run_setup():
             logger.info("Registered %d plugin command(s)", len(plugin_cmds))
 
     mic_device = config.get("mic_device")
-    stream = sd.InputStream(
-        samplerate=16000,
-        channels=1,
-        dtype="float32",
-        device=mic_device,
-        callback=audio_callback,
-    )
-    stream.start()
+    try:
+        stream = sd.InputStream(
+            samplerate=16000,
+            channels=1,
+            dtype="float32",
+            device=mic_device,
+            callback=audio_callback,
+        )
+        stream.start()
+    except Exception as e:
+        logger.error("Failed to open audio stream at startup: %s", e)
+        error_notify("Microphone unavailable. Check your mic — Koda will retry automatically.")
 
     setup_hotkeys()
     start_wake_word_listener()

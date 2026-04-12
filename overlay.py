@@ -5,9 +5,31 @@ Same branded icon as the tray (dark square, white K, colored dot),
 displayed as a draggable floating widget. Right-click to hide.
 """
 
+import ctypes
+import ctypes.wintypes
 import tkinter as tk
 from PIL import ImageTk
 import threading
+
+
+def _is_on_screen(x, y, size):
+    """Return True if the centre of the overlay at (x, y) falls on any connected monitor."""
+    pt = ctypes.wintypes.POINT(x + size // 2, y + size // 2)
+    # MONITOR_DEFAULTTONULL returns NULL when the point is off all monitors
+    return ctypes.windll.user32.MonitorFromPoint(pt, 0) != 0
+
+
+def _default_position(size):
+    """Return (x, y) for bottom-right of the primary monitor work area (excludes taskbar)."""
+    class RECT(ctypes.Structure):
+        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                    ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+    work = RECT()
+    # SPI_GETWORKAREA = 0x0030
+    ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0)
+    x = work.right - size - 20
+    y = work.bottom - size - 20
+    return x, y
 
 
 class KodaOverlay:
@@ -71,15 +93,12 @@ class KodaOverlay:
         # Render initial icon
         self._update_icon()
 
-        # Position bottom-right
+        # Position bottom-right of primary monitor work area (excludes taskbar)
         root.update_idletasks()
-        if self._position:
+        if self._position and _is_on_screen(*self._position, SIZE):
             x, y = self._position
         else:
-            screen_w = root.winfo_screenwidth()
-            screen_h = root.winfo_screenheight()
-            x = screen_w - SIZE - 20
-            y = screen_h - SIZE - 120
+            x, y = _default_position(SIZE)
         root.geometry(f"{SIZE}x{SIZE}+{x}+{y}")
 
         # Drag and hide
