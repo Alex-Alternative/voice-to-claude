@@ -85,9 +85,8 @@ def _load_icon_base(size=64):
     ico_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "koda.ico")
     try:
         img = Image.open(ico_path)
-        img.size = (size, size)
         img.load()
-        return img.copy()
+        return img.resize((size, size), Image.LANCZOS)
     except Exception:
         pass
     # Fallback: generate a simple icon if .ico is missing
@@ -751,7 +750,7 @@ def undo_and_rerecord():
     if last_transcription:
         # Select all the text that was just pasted and delete it
         # Use Ctrl+Z to undo the paste
-        pyautogui.hotkey("ctrl", "z")
+        keyboard.send("ctrl+z")
         time.sleep(0.2)
     # Start recording in the same mode as last time
     start_recording(recording_mode)
@@ -862,7 +861,7 @@ def read_selected():
     text = pyperclip.paste()
     pyperclip.copy(original)
 
-    if not text:
+    if not text or text == original:
         return
 
     tts_speaking = True

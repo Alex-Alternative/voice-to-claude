@@ -312,7 +312,7 @@ class KodaSettings(tk.Tk):
         # Kill running Koda instances
         import subprocess
         subprocess.run(["powershell", "-Command",
-                        "Get-Process pythonw -ErrorAction SilentlyContinue | Stop-Process -Force"],
+                        "Get-Process pythonw,python -ErrorAction SilentlyContinue | Stop-Process -Force"],
                        capture_output=True)
         import time
         time.sleep(1)
