@@ -461,13 +461,14 @@ class KodaSettings(tk.Tk):
 
     def save_and_restart(self):
         self.save()
-        # Kill running Koda instances
         import subprocess
-        subprocess.run(["powershell", "-Command",
-                        "Get-Process pythonw,python -ErrorAction SilentlyContinue | Stop-Process -Force"],
-                       capture_output=True)
         import time
-        time.sleep(1)
+        # Kill only the main Koda process (pythonw.exe).
+        # Do NOT kill python.exe — that's this settings GUI process.
+        subprocess.run(["powershell", "-Command",
+                        "Get-Process pythonw -ErrorAction SilentlyContinue | Stop-Process -Force"],
+                       capture_output=True)
+        time.sleep(0.5)
         # Restart
         start_bat = os.path.join(SCRIPT_DIR, "start.bat")
         subprocess.Popen(["cmd", "/c", start_bat], cwd=SCRIPT_DIR,
