@@ -74,6 +74,7 @@ _hotkey_proc = None       # multiprocessing.Process
 _hotkey_conn = None       # parent end of Pipe
 _hotkey_listener = None   # thread reading events from subprocess
 _hotkey_pong = threading.Event()  # set by event thread when "pong" arrives
+_last_key_event_mono = time.monotonic()  # last key delivery confirmed by hotkey service
 
 
 # ============================================================
@@ -907,7 +908,11 @@ def _hotkey_event_thread():
             if event == "ready":
                 logger.info("Hotkey service reports ready")
             elif event == "pong":
-                _hotkey_pong.set()  # Signal watchdog that service is responsive
+                _hotkey_pong.set()  # Signal watchdog that service is responsive (legacy plain string)
+            elif isinstance(event, tuple) and len(event) == 2 and event[0] == "pong":
+                _hotkey_pong.set()
+                global _last_key_event_mono
+                _last_key_event_mono = event[1]  # monotonic time of last actual key delivery
             elif event == "hooks_dead":
                 logger.warning("Hotkey service reports hooks are dead — triggering restart")
                 threading.Thread(target=setup_hotkeys, daemon=True).start()
@@ -999,7 +1004,8 @@ def setup_hotkeys():
     Keyboard hooks run in a dedicated process so they are immune to GIL
     contention from Whisper transcription in the main process.
     """
-    global _hotkey_proc, _hotkey_conn, _hotkey_listener, _hotkeys_registered
+    global _hotkey_proc, _hotkey_conn, _hotkey_listener, _hotkeys_registered, _last_key_event_mono
+    _last_key_event_mono = time.monotonic()  # reset on restart — give new service grace period
 
     # Stop any existing service first
     _stop_hotkey_service()
@@ -1176,6 +1182,24 @@ def _watchdog_thread():
                         except Exception as e:
                             logger.error("Hotkey ping error: %s — restarting", e)
                             setup_hotkeys()
+
+                    # Check for silent hook death: process alive, pong replies, but
+                    # Windows stopped delivering key events to the hook thread.
+                    # _last_key_event_mono is updated by catch-all keyboard.on_press
+                    # in hotkey_service; if it goes stale, the WH_KEYBOARD_LL hook is dead.
+                    secs_since_key = now - _last_key_event_mono
+                    if secs_since_key > 900:  # 15 min — almost certainly a dead hook
+                        logger.warning(
+                            "No key events for %.0fs — silent hook death detected, restarting hotkey service",
+                            secs_since_key,
+                        )
+                        setup_hotkeys()
+                        error_notify("Hotkeys recovered automatically. You're good to go.")
+                    elif secs_since_key > 600:  # 10 min — warn but don't restart yet
+                        logger.warning(
+                            "No key events for %.0fs — hook may be dead (will restart at 15 min)",
+                            secs_since_key,
+                        )
                 except Exception as e:
                     logger.error("Hotkey health check error: %s", e)
                     try:
