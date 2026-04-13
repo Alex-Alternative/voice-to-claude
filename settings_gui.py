@@ -470,9 +470,9 @@ class KodaSettings(tk.Tk):
                         "Get-Process pythonw -ErrorAction SilentlyContinue | Stop-Process -Force"],
                        capture_output=True)
         time.sleep(0.5)
-        # Restart — DETACHED_PROCESS so it survives this process exiting
-        start_bat = os.path.join(SCRIPT_DIR, "start.bat")
-        subprocess.Popen(["cmd", "/c", start_bat], cwd=SCRIPT_DIR,
+        # Restart — launch pythonw directly (bypasses start.bat activation quirks)
+        pythonw = os.path.join(SCRIPT_DIR, "venv", "Scripts", "pythonw.exe")
+        subprocess.Popen([pythonw, "voice.py"], cwd=SCRIPT_DIR,
                          creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
         self.destroy()
 
