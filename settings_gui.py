@@ -464,11 +464,10 @@ class KodaSettings(tk.Tk):
         self.save(notify=False)
         import subprocess
         import time
-        # Kill only the main Koda process (pythonw.exe).
-        # Do NOT kill python.exe — that's this settings GUI process.
-        subprocess.run(["powershell", "-Command",
-                        "Get-Process pythonw -ErrorAction SilentlyContinue | Stop-Process -Force"],
-                       capture_output=True)
+        # Kill only the parent Koda process by PID — not all pythonw processes,
+        # since settings_gui itself runs as pythonw and would be self-killed.
+        parent_pid = os.getppid()
+        subprocess.run(["taskkill", "/f", "/pid", str(parent_pid)], capture_output=True)
         time.sleep(0.5)
         # Restart — launch pythonw directly (bypasses start.bat activation quirks)
         pythonw = os.path.join(SCRIPT_DIR, "venv", "Scripts", "pythonw.exe")
