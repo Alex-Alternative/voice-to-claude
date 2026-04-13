@@ -23,6 +23,11 @@ from text_processing import (
     apply_custom_vocabulary,
     expand_code_vocabulary,
     apply_case_formatting,
+    apply_snippets,
+    load_filler_words,
+    save_filler_words,
+    DEFAULT_FILLER_WORDS,
+    FILLER_WORDS_PATH,
 )
 from voice_commands import extract_and_execute_commands
 from profiles import match_profile, deep_merge
@@ -1091,6 +1096,158 @@ class TestCustomVocabularyPipeline(unittest.TestCase):
 
     def test_vocab_empty_text_returns_empty(self):
         self.assertEqual(process_text("", self._cfg({"coda": "Koda"})), "")
+
+
+# ============================================================
+# Snippets
+# ============================================================
+
+class TestSnippets(unittest.TestCase):
+    """Tests for apply_snippets and its integration into process_text."""
+
+    SNIPS = {
+        "my address": "123 Main St, Anytown CA 90210",
+        "my sig": "Best regards, Alexi",
+        "test snippet": "hello world",
+    }
+
+    def test_exact_trigger_match(self):
+        text, matched = apply_snippets("my address", self.SNIPS)
+        self.assertTrue(matched)
+        self.assertEqual(text, "123 Main St, Anytown CA 90210")
+
+    def test_case_insensitive_trigger(self):
+        text, matched = apply_snippets("MY ADDRESS", self.SNIPS)
+        self.assertTrue(matched)
+        self.assertEqual(text, "123 Main St, Anytown CA 90210")
+
+    def test_trailing_punct_stripped(self):
+        # Whisper may append a period — should still match
+        text, matched = apply_snippets("my address.", self.SNIPS)
+        self.assertTrue(matched)
+        self.assertEqual(text, "123 Main St, Anytown CA 90210")
+
+    def test_no_match_returns_original(self):
+        text, matched = apply_snippets("send email", self.SNIPS)
+        self.assertFalse(matched)
+        self.assertEqual(text, "send email")
+
+    def test_empty_snippets_no_change(self):
+        text, matched = apply_snippets("my address", {})
+        self.assertFalse(matched)
+        self.assertEqual(text, "my address")
+
+    def test_empty_text_returns_empty(self):
+        text, matched = apply_snippets("", self.SNIPS)
+        self.assertFalse(matched)
+        self.assertEqual(text, "")
+
+    def test_not_inline_replacement(self):
+        # Snippet trigger embedded mid-sentence must NOT expand
+        text, matched = apply_snippets("please use my address for shipping", self.SNIPS)
+        self.assertFalse(matched)
+
+    def test_snippet_bypasses_pipeline(self):
+        # Expansion is returned as-is, not run through auto-capitalize
+        config = {
+            "snippets": {"test snippet": "hello world"},
+            "post_processing": {"auto_capitalize": True, "remove_filler_words": True, "auto_format": True},
+        }
+        result = process_text("test snippet", config)
+        self.assertEqual(result, "hello world")  # NOT "Hello world"
+
+    def test_via_process_text_wired(self):
+        config = {
+            "snippets": {"my sig": "Best regards, Alexi"},
+            "post_processing": {},
+        }
+        result = process_text("my sig", config)
+        self.assertEqual(result, "Best regards, Alexi")
+
+    def test_multiple_snippets_selects_correct(self):
+        text, matched = apply_snippets("my sig", self.SNIPS)
+        self.assertTrue(matched)
+        self.assertEqual(text, "Best regards, Alexi")
+
+
+# ============================================================
+# Filler Words Manager
+# ============================================================
+
+class TestFillerWordsManager(unittest.TestCase):
+    """Tests for load_filler_words, save_filler_words, and remove_filler_words with custom lists."""
+
+    def test_default_words_includes_common_fillers(self):
+        self.assertIn("um", DEFAULT_FILLER_WORDS)
+        self.assertIn("uh", DEFAULT_FILLER_WORDS)
+        self.assertIn("you know", DEFAULT_FILLER_WORDS)
+        self.assertIn("basically", DEFAULT_FILLER_WORDS)
+
+    def test_load_returns_defaults_when_no_file(self):
+        with patch("text_processing.FILLER_WORDS_PATH", "/nonexistent/path/filler_words.json"):
+            words = load_filler_words()
+        self.assertEqual(words, list(DEFAULT_FILLER_WORDS))
+
+    def test_save_and_load_round_trip(self):
+        custom = ["um", "uh", "like", "you know"]
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            tmp_path = f.name
+        try:
+            with patch("text_processing.FILLER_WORDS_PATH", tmp_path):
+                save_filler_words(custom)
+                loaded = load_filler_words()
+            self.assertEqual(loaded, custom)
+        finally:
+            os.unlink(tmp_path)
+
+    def test_load_corrupt_falls_back_to_defaults(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            f.write("not valid json {{{{")
+            tmp_path = f.name
+        try:
+            with patch("text_processing.FILLER_WORDS_PATH", tmp_path):
+                words = load_filler_words()
+            self.assertEqual(words, list(DEFAULT_FILLER_WORDS))
+        finally:
+            os.unlink(tmp_path)
+
+    def test_load_empty_list_is_valid(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump([], f)
+            tmp_path = f.name
+        try:
+            with patch("text_processing.FILLER_WORDS_PATH", tmp_path):
+                words = load_filler_words()
+            self.assertEqual(words, [])
+        finally:
+            os.unlink(tmp_path)
+
+    def test_custom_word_removed(self):
+        result = remove_filler_words("I like totally agree", words=["totally"])
+        self.assertNotIn("totally", result)
+        self.assertIn("agree", result)
+
+    def test_custom_multi_word_phrase_removed(self):
+        result = remove_filler_words("it was kind of interesting", words=["kind of"])
+        self.assertNotIn("kind of", result)
+        self.assertIn("interesting", result)
+
+    def test_builtin_um_removed_with_defaults(self):
+        result = remove_filler_words("um I think so", words=list(DEFAULT_FILLER_WORDS))
+        self.assertNotIn("um", result)
+        self.assertIn("think", result)
+
+    def test_no_false_positive_word_boundary(self):
+        # "um" inside "summer" must NOT be removed
+        result = remove_filler_words("the summer heat", words=["um"])
+        self.assertIn("summer", result)
+
+    def test_empty_filler_list_leaves_text_unchanged(self):
+        text = "um I basically agree"
+        result = remove_filler_words(text, words=[])
+        # Stutter removal still runs, but no filler removal — text nearly unchanged
+        self.assertIn("um", result)
+        self.assertIn("basically", result)
 
 
 if __name__ == "__main__":

@@ -50,6 +50,7 @@ DEFAULT_CONFIG = {
     "overlay_enabled": True,
     "profiles_enabled": True,
     "voice_commands": True,
+    "snippets": {},
     "translation": {
         "enabled": False,
         "target_language": "English",

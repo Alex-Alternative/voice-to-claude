@@ -31,13 +31,15 @@ class KodaSettings(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Koda Settings")
-        self.geometry("520x1300")
+        self.geometry("520x1750")
         self.resizable(False, False)
         self.configure(bg="#1e1e2e")
 
         self.config_data = load_config()
         self._custom_words = self._load_custom_words_data()
         self._profiles_data = self._load_profiles_data()
+        self._filler_words = self._load_filler_words_data()
+        self._snippets = dict(self.config_data.get("snippets", {}))
 
         # Style
         style = ttk.Style()
@@ -205,6 +207,62 @@ class KodaSettings(tk.Tk):
         ttk.Button(prof_btn_row, text="Remove", command=self._remove_profile).pack(side="left", padx=(0, 12))
         ttk.Button(prof_btn_row, text="Edit profiles.json", command=self._open_profiles).pack(side="left")
 
+        # --- Filler Words ---
+        ttk.Label(main, text="FILLER WORDS", style="Header.TLabel").pack(anchor="w", pady=(15, 5))
+        ttk.Label(main, text="Words and phrases removed from speech (when filler removal is on):").pack(anchor="w")
+
+        fw_frame = ttk.Frame(main)
+        fw_frame.pack(fill="x", pady=(5, 0))
+
+        self._filler_tree = ttk.Treeview(
+            fw_frame, columns=("word",), show="headings", height=5,
+            selectmode="browse",
+        )
+        self._filler_tree.heading("word", text="Word / Phrase")
+        self._filler_tree.column("word", width=450, anchor="w")
+        self._filler_tree.pack(side="left", fill="x", expand=True)
+
+        fw_scroll = ttk.Scrollbar(fw_frame, orient="vertical", command=self._filler_tree.yview)
+        self._filler_tree.configure(yscrollcommand=fw_scroll.set)
+        fw_scroll.pack(side="left", fill="y")
+
+        self._refresh_filler_tree()
+
+        fw_btn_row = ttk.Frame(main)
+        fw_btn_row.pack(anchor="w", pady=(4, 0))
+        ttk.Button(fw_btn_row, text="Add", command=self._add_filler_word).pack(side="left", padx=(0, 4))
+        ttk.Button(fw_btn_row, text="Remove", command=self._remove_filler_word).pack(side="left", padx=(0, 12))
+        ttk.Button(fw_btn_row, text="Restore defaults", command=self._restore_filler_defaults).pack(side="left")
+
+        # --- Snippets ---
+        ttk.Label(main, text="SNIPPETS", style="Header.TLabel").pack(anchor="w", pady=(15, 5))
+        ttk.Label(main, text="Speak the trigger alone to paste the expansion:").pack(anchor="w")
+
+        sn_frame = ttk.Frame(main)
+        sn_frame.pack(fill="x", pady=(5, 0))
+
+        self._snippets_tree = ttk.Treeview(
+            sn_frame, columns=("trigger", "expansion"), show="headings", height=4,
+            selectmode="browse",
+        )
+        self._snippets_tree.heading("trigger", text="Trigger")
+        self._snippets_tree.heading("expansion", text="Expansion")
+        self._snippets_tree.column("trigger", width=150, anchor="w")
+        self._snippets_tree.column("expansion", width=300, anchor="w")
+        self._snippets_tree.pack(side="left", fill="x", expand=True)
+
+        sn_scroll = ttk.Scrollbar(sn_frame, orient="vertical", command=self._snippets_tree.yview)
+        self._snippets_tree.configure(yscrollcommand=sn_scroll.set)
+        sn_scroll.pack(side="left", fill="y")
+
+        self._refresh_snippets_tree()
+
+        sn_btn_row = ttk.Frame(main)
+        sn_btn_row.pack(anchor="w", pady=(4, 0))
+        ttk.Button(sn_btn_row, text="Add", command=self._add_snippet).pack(side="left", padx=(0, 4))
+        ttk.Button(sn_btn_row, text="Edit", command=self._edit_snippet).pack(side="left", padx=(0, 4))
+        ttk.Button(sn_btn_row, text="Remove", command=self._remove_snippet).pack(side="left")
+
         # --- Toggles ---
         ttk.Label(main, text="FEATURES", style="Header.TLabel").pack(anchor="w", pady=(15, 5))
 
@@ -363,9 +421,11 @@ class KodaSettings(tk.Tk):
         tts["voice"] = self.voice_var.get()
         tts["rate"] = self.speed_var.get()
 
+        cfg["snippets"] = self._snippets
         save_config(cfg)
         self._save_custom_words_data()
         self._save_profiles_data()
+        self._save_filler_words_data()
         messagebox.showinfo("Koda", "Settings saved! Restart Koda for changes to take effect.")
 
     def save_and_restart(self):
@@ -547,6 +607,139 @@ class KodaSettings(tk.Tk):
             return
         self._profiles_data.pop(sel[0], None)
         self._refresh_profile_tree()
+
+    # --- Filler Words CRUD ---
+
+    def _load_filler_words_data(self):
+        from text_processing import load_filler_words
+        return load_filler_words()
+
+    def _save_filler_words_data(self):
+        from text_processing import save_filler_words
+        save_filler_words(self._filler_words)
+
+    def _refresh_filler_tree(self):
+        self._filler_tree.delete(*self._filler_tree.get_children())
+        for word in self._filler_words:
+            self._filler_tree.insert("", "end", values=(word,))
+
+    def _add_filler_word(self):
+        dlg = tk.Toplevel(self)
+        dlg.title("Add Filler Word")
+        dlg.geometry("340x110")
+        dlg.resizable(False, False)
+        dlg.configure(bg="#1e1e2e")
+        dlg.grab_set()
+        result = [None]
+        ttk.Label(dlg, text="Word or phrase to remove:").grid(row=0, column=0, sticky="w", padx=12, pady=(14, 4))
+        word_var = tk.StringVar()
+        entry = ttk.Entry(dlg, textvariable=word_var, width=28)
+        entry.grid(row=0, column=1, padx=(0, 12), pady=(14, 4))
+        def on_ok(*_):
+            w = word_var.get().strip().lower()
+            if not w:
+                messagebox.showwarning("Koda", "Enter a word or phrase.", parent=dlg)
+                return
+            result[0] = w
+            dlg.destroy()
+        btn_row = ttk.Frame(dlg)
+        btn_row.grid(row=1, column=0, columnspan=2, pady=(6, 0))
+        ttk.Button(btn_row, text="OK", command=on_ok).pack(side="left", padx=6)
+        ttk.Button(btn_row, text="Cancel", command=dlg.destroy).pack(side="left")
+        entry.focus_set()
+        entry.bind("<Return>", on_ok)
+        dlg.wait_window()
+        if result[0] and result[0] not in self._filler_words:
+            self._filler_words.append(result[0])
+            self._refresh_filler_tree()
+
+    def _remove_filler_word(self):
+        sel = self._filler_tree.selection()
+        if not sel:
+            messagebox.showinfo("Koda", "Select a word to remove.", parent=self)
+            return
+        word = self._filler_tree.item(sel[0], "values")[0]
+        if word in self._filler_words:
+            self._filler_words.remove(word)
+        self._refresh_filler_tree()
+
+    def _restore_filler_defaults(self):
+        from text_processing import DEFAULT_FILLER_WORDS
+        self._filler_words = list(DEFAULT_FILLER_WORDS)
+        self._refresh_filler_tree()
+
+    # --- Snippets CRUD ---
+
+    def _refresh_snippets_tree(self):
+        self._snippets_tree.delete(*self._snippets_tree.get_children())
+        for trigger, expansion in self._snippets.items():
+            display = expansion if len(expansion) <= 40 else expansion[:37] + "..."
+            self._snippets_tree.insert("", "end", iid=trigger, values=(trigger, display))
+
+    def _snippet_dialog(self, title, trigger="", expansion=""):
+        """Add/Edit dialog. Returns (trigger, expansion) or None."""
+        dlg = tk.Toplevel(self)
+        dlg.title(title)
+        dlg.geometry("440x160")
+        dlg.resizable(False, False)
+        dlg.configure(bg="#1e1e2e")
+        dlg.grab_set()
+        result = [None]
+        ttk.Label(dlg, text="Trigger phrase (say this alone):").grid(row=0, column=0, sticky="w", padx=12, pady=(14, 4))
+        trig_var = tk.StringVar(value=trigger)
+        trig_entry = ttk.Entry(dlg, textvariable=trig_var, width=30)
+        trig_entry.grid(row=0, column=1, padx=(0, 12), pady=(14, 4))
+        ttk.Label(dlg, text="Expansion (text to paste):").grid(row=1, column=0, sticky="w", padx=12, pady=4)
+        exp_var = tk.StringVar(value=expansion)
+        exp_entry = ttk.Entry(dlg, textvariable=exp_var, width=30)
+        exp_entry.grid(row=1, column=1, padx=(0, 12), pady=4)
+        def on_ok(*_):
+            t = trig_var.get().strip().lower()
+            e = exp_var.get().strip()
+            if not t or not e:
+                messagebox.showwarning("Koda", "Both fields are required.", parent=dlg)
+                return
+            result[0] = (t, e)
+            dlg.destroy()
+        btn_row = ttk.Frame(dlg)
+        btn_row.grid(row=2, column=0, columnspan=2, pady=(10, 0))
+        ttk.Button(btn_row, text="OK", command=on_ok).pack(side="left", padx=6)
+        ttk.Button(btn_row, text="Cancel", command=dlg.destroy).pack(side="left")
+        trig_entry.focus_set()
+        trig_entry.bind("<Return>", lambda e: exp_entry.focus_set())
+        exp_entry.bind("<Return>", on_ok)
+        dlg.wait_window()
+        return result[0]
+
+    def _add_snippet(self):
+        pair = self._snippet_dialog("Add Snippet")
+        if pair:
+            trigger, expansion = pair
+            self._snippets[trigger] = expansion
+            self._refresh_snippets_tree()
+
+    def _edit_snippet(self):
+        sel = self._snippets_tree.selection()
+        if not sel:
+            messagebox.showinfo("Koda", "Select a snippet to edit.", parent=self)
+            return
+        old_trigger = sel[0]
+        old_expansion = self._snippets.get(old_trigger, "")
+        pair = self._snippet_dialog("Edit Snippet", old_trigger, old_expansion)
+        if pair:
+            new_trigger, new_expansion = pair
+            if old_trigger != new_trigger:
+                del self._snippets[old_trigger]
+            self._snippets[new_trigger] = new_expansion
+            self._refresh_snippets_tree()
+
+    def _remove_snippet(self):
+        sel = self._snippets_tree.selection()
+        if not sel:
+            messagebox.showinfo("Koda", "Select a snippet to remove.", parent=self)
+            return
+        self._snippets.pop(sel[0], None)
+        self._refresh_snippets_tree()
 
     # --- Custom Vocabulary CRUD ---
 

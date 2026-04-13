@@ -3,8 +3,13 @@ Text post-processing pipeline for Koda.
 Cleans up Whisper transcription output before pasting.
 """
 
+import json
+import os
 import re
 from datetime import datetime
+
+_MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+FILLER_WORDS_PATH = os.path.join(_MODULE_DIR, "filler_words.json")
 
 
 # --- Custom Vocabulary Replacement ---
@@ -21,14 +26,33 @@ def apply_custom_vocabulary(text, custom_words):
 
 # --- Filler Word Removal ---
 
-FILLER_PATTERNS = [
+DEFAULT_FILLER_WORDS = [
     # Pure fillers
-    r'\b(um|uh|uhh|umm|hmm|hm|er|err|ah|ahh)\b',
+    "um", "uh", "uhh", "umm", "hmm", "hm", "er", "err", "ah", "ahh",
     # Discourse markers
-    r'\b(you know|I mean|sort of|kind of)\b',
+    "you know", "i mean", "sort of", "kind of",
     # Hedging words (common in speech, rarely useful in prompts)
-    r'\b(basically|actually|literally|honestly|obviously|clearly)\b',
+    "basically", "actually", "literally", "honestly", "obviously", "clearly",
 ]
+
+
+def load_filler_words():
+    """Load filler word list from filler_words.json; fall back to defaults."""
+    if os.path.exists(FILLER_WORDS_PATH):
+        try:
+            with open(FILLER_WORDS_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data
+        except Exception:
+            pass
+    return list(DEFAULT_FILLER_WORDS)
+
+
+def save_filler_words(words):
+    """Write filler word list to filler_words.json."""
+    with open(FILLER_WORDS_PATH, "w", encoding="utf-8") as f:
+        json.dump(words, f, indent=2)
 
 # Words that can legitimately repeat (number words, common words)
 _STUTTER_SAFE = {
@@ -50,10 +74,23 @@ def _remove_stutters(text):
     return re.sub(r'\b(\w+)\s+\1\b', _stutter_replace, text, flags=re.IGNORECASE)
 
 
-def remove_filler_words(text):
-    """Remove common filler words and speech artifacts."""
-    for pattern in FILLER_PATTERNS:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+def remove_filler_words(text, words=None):
+    """Remove filler words and speech artifacts.
+
+    Args:
+        text: input text
+        words: list of words/phrases to remove; uses load_filler_words() if None
+    """
+    if words is None:
+        words = load_filler_words()
+    if words:
+        # Sort longest first so multi-word phrases match before single words
+        words_sorted = sorted(words, key=len, reverse=True)
+        pattern = re.compile(
+            r'\b(?:' + '|'.join(re.escape(w) for w in words_sorted) + r')\b',
+            re.IGNORECASE,
+        )
+        text = re.sub(pattern, '', text)
     # Remove stuttered words (but not number words)
     text = _remove_stutters(text)
     # Clean up double/triple spaces
@@ -532,12 +569,37 @@ def format_spoken_emails(text):
     return text
 
 
+# --- Snippets ---
+
+def apply_snippets(text, snippets):
+    """If the entire text matches a snippet trigger, return (expansion, True).
+
+    Matching is case-insensitive and strips trailing punctuation that Whisper
+    may append (e.g. "my address." still triggers "my address").
+    Returns (original_text, False) when no match is found.
+    """
+    if not snippets or not text:
+        return text, False
+    key = text.strip().lower().rstrip(".,!?;:")
+    for trigger, expansion in snippets.items():
+        if key == trigger.strip().lower():
+            return expansion, True
+    return text, False
+
+
 # --- Processing Pipeline ---
 
 def process_text(text, config):
     """Run the full post-processing pipeline based on config."""
     if not text:
         return text
+
+    # Snippets are checked first — a trigger match bypasses the rest of the pipeline
+    snippets = config.get("snippets", {})
+    if snippets:
+        expanded, matched = apply_snippets(text, snippets)
+        if matched:
+            return expanded
 
     pp = config.get("post_processing", {})
 
