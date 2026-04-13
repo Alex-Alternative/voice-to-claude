@@ -11,7 +11,8 @@ respond promptly regardless of what the main process is doing.
 Protocol (over multiprocessing.Pipe):
     Child → Parent events:
         "ready"                 — hooks registered, service is live
-        "pong"                  — reply to "ping"
+        ("pong", float)         — reply to "ping"; float is monotonic time of last key event
+        "pong"                  — legacy plain pong (only sent if _hooks_alive() check fails path)
         "dictation_press"       — hold mode: hotkey pressed
         "dictation_release"     — hold mode: trigger key released
         "command_press"         — hold mode: hotkey pressed
@@ -31,9 +32,22 @@ import keyboard
 import os
 import sys
 import logging
+import threading
 import time
 
 logger = logging.getLogger("koda.hotkey")
+
+# Tracks the monotonic time of the last key event actually delivered by Windows.
+# Updated by a catch-all keyboard.on_press hook. If this stops updating while
+# the listener thread stays alive, the Windows WH_KEYBOARD_LL hook is dead.
+_last_any_key_time = time.monotonic()
+_last_any_key_lock = threading.Lock()
+
+
+def _touch_last_key(_event=None):
+    global _last_any_key_time
+    with _last_any_key_lock:
+        _last_any_key_time = time.monotonic()
 
 
 def service_main(conn, hotkey_config):
@@ -117,6 +131,10 @@ def service_main(conn, hotkey_config):
     register_hotkey(hotkey_read, "readback")
     register_hotkey(hotkey_read_sel, "readback_selected")
 
+    # Catch-all hook: any key delivery proves Windows hook is still alive.
+    # This does NOT suppress or affect normal key processing.
+    keyboard.on_press(_touch_last_key)
+
     logger.info("Hotkey service ready (mode=%s, pid=%d)", mode, os.getpid())
     send_event("ready")
 
@@ -151,7 +169,9 @@ def service_main(conn, hotkey_config):
                         break
                     elif cmd == "ping":
                         if _hooks_alive():
-                            send_event("pong")
+                            with _last_any_key_lock:
+                                last_key = _last_any_key_time
+                            send_event(("pong", last_key))
                         else:
                             # Don't respond with pong — parent will detect timeout
                             # and restart us. This is the right thing to do.
