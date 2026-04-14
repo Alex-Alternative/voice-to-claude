@@ -13,14 +13,18 @@
 #define MyAppPublisher "Alex Concepcion"
 #define MyAppURL "https://github.com/Moonhawk80/koda"
 #define MyAppExeName "Koda.exe"
+#define MyAppDescription "Push-to-talk voice transcription for Windows"
+#define MyAppCopyright "Copyright 2026 Alexis Concepcion"
 
 [Setup]
 AppId={{B7E3F2A1-8C4D-4E5F-9A6B-1C2D3E4F5A6B}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
+AppCopyright={#MyAppCopyright}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
@@ -29,6 +33,9 @@ OutputBaseFilename=KodaSetup-{#MyAppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+WizardImageFile=wizard_banner.bmp
+WizardSmallImageFile=wizard_small.bmp
+LicenseFile=..\LICENSE
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -36,6 +43,13 @@ UninstallDisplayName={#MyAppName}
 SetupIconFile=..\koda.ico
 UninstallDisplayIcon={app}\koda.ico
 SetupLogging=yes
+; Version info embedded in the installer exe
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoCopyright={#MyAppCopyright}
+VersionInfoDescription={#MyAppDescription}
+VersionInfoVersion={#MyAppVersion}.0
+VersionInfoProductName={#MyAppName}
+VersionInfoProductVersion={#MyAppVersion}.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
