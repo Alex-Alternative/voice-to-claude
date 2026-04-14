@@ -48,4 +48,190 @@ Read STATUS.md for full context.
   - config.json is gitignored — a fresh one will be generated on first run
   - GitHub CLI auth: Moonhawk80
   - GitHub CLI path: "C:\Program Files\GitHub CLI\gh.exe" (if installed)
+
+
+---
+<!-- Additional content from home PC sessions -->
+
+# Home PC Session — Combined Prompt
+**Captured:** 2026-04-13 (work laptop, session 19)
+**Covers:** Session startup sync + 2 feature tasks. Do them in order.
+
+---
+
+## Paste this into Claude Code on the home PC
+
+```
+cd C:\Users\alex\Projects\koda
+
+## STEP 1: Sync and verify before anything else
+
+IMPORTANT — do these in this exact order to avoid conflicts:
+
+1. Check for uncommitted work on THIS machine first (before pulling):
+   git status
+   If there are any changes (modified, untracked, staged), commit and push
+   them NOW before doing anything else:
+     git add -p   (stage selectively) or git add <specific files>
+     git commit -m "WIP: home PC work from last session"
+     git push origin master
+   Do not skip this — pulling with local changes can cause conflicts or
+   silently overwrite work.
+
+2. Now pull the work PC changes:
+   git pull origin master
+   If there are merge conflicts, resolve them before proceeding.
+
+3. Run from source (do NOT rebuild the installer for dev work):
+   venv\Scripts\activate
+   pythonw voice.py
+   The installer is for distributing to OTHER people. For daily dev use,
+   run from source. If you need to test the installer specifically:
+     python build_exe.py
+     python installer\build_installer.py
+   Publisher is "Alex Concepcion" (was "Alex Alternative"). Build includes
+   tkinter (was crashing before session 15 fix).
+
+4. Verify Koda is working: Ctrl+Space, hold to talk, release to paste.
+   Check debug.log for "Koda v4.2.0 fully initialized".
+   Then lock screen (Win+L), unlock, verify hotkeys still work — we fixed
+   a screen-lock hook bug today, confirm it's working on this machine too.
+
+ALWAYS git pull at start of session, git push at end. Cross-PC sync depends on it.
+
+---
+
+## TASK 1 (do after sync): Rewrite hotkey_service.py to use RegisterHotKey
+
+### Why
+The keyboard library uses WH_KEYBOARD_LL hooks which Windows kills silently
+in multiple scenarios (screen lock, UAC, fast user switching). Hotkeys broke
+3+ times in one workday (session 19). We've been patching failure modes one
+by one. The permanent fix is RegisterHotKey — the Windows-native hotkey API
+that registers with the OS Window Manager and survives all of the above.
+
+Current workarounds in voice.py (keep as defense-in-depth after the rewrite):
+- Screen lock/unlock detection → restart hotkeys on unlock
+- Key-event staleness check → yellow dot + restart after 15 min
+- Sleep/wake gap detection → full recovery
+- Ping-based liveness check → restart if subprocess dies
+
+### What RegisterHotKey is
+ctypes.windll.user32.RegisterHotKey(hwnd, id, modifiers, vk) registers a
+hotkey directly with the OS Window Manager. Delivers WM_HOTKEY (0x0312)
+messages to a thread's message queue via GetMessage(). Never silently
+killed, survives screen lock/unlock and sleep/wake natively, no 300ms
+timeout constraint.
+
+### Current hotkey_service.py architecture
+- Runs as multiprocessing.Process (subprocess of voice.py)
+- Communicates via multiprocessing.Pipe (bidirectional)
+- Parent sends: "ping", "quit"
+- Child sends: "ready", ("pong", last_key_mono), "hooks_dead",
+  "dictation_press", "dictation_release", "command_press",
+  "command_release", "prompt_press", "prompt_release",
+  "dictation_toggle", "command_toggle", "prompt_toggle",
+  "correction", "readback", "readback_selected"
+- Hold mode: _press on keydown, _release on trigger key up
+- Toggle mode: _toggle on keydown only
+- DO NOT change voice.py's side of the pipe — same protocol must be kept
+
+### New implementation plan for hotkey_service.py
+1. RegisterHotKey for each hotkey (press/toggle detection)
+2. Hold mode releases: a minimal WH_KEYBOARD_LL hook ONLY for WM_KEYUP
+   on the trigger keys — no timing pressure, just checks key and sends event
+3. Win32 message loop: GetMessage() handles WM_HOTKEY (id→event name) and
+   WM_KEYUP from the companion hook
+4. Pipe commands: run a daemon thread that calls conn.recv() and posts
+   WM_APP+1 (0x8001) to the message loop thread via PostThreadMessage(),
+   passing the command through a thread-safe queue
+5. On "ping": send ("pong", last_key_mono) — same as current
+6. On "quit": UnregisterHotKey all, unhook WH_KEYBOARD_LL, exit cleanly
+
+### RegisterHotKey constants
+MOD_ALT      = 0x0001
+MOD_CONTROL  = 0x0002
+MOD_SHIFT    = 0x0004
+MOD_WIN      = 0x0008
+MOD_NOREPEAT = 0x4000  # prevents WM_HOTKEY spam on key hold
+
+### Key VK codes
+VK_SPACE     = 0x20
+VK_F1..F12   = 0x70..0x7B
+VK_A..Z      = 0x41..0x5A (uppercase ASCII)
+Example: "ctrl+space" → modifiers=MOD_CONTROL|MOD_NOREPEAT, vk=VK_SPACE
+Example: "f8"         → modifiers=MOD_NOREPEAT, vk=0x77
+
+### last_key_mono tracking
+Update _last_any_key_time on every WM_HOTKEY received and on every trigger
+key-up from the companion hook. Send in pong tuple as before.
+
+### Proposal before building (Alex's workflow rule)
+Read the current hotkey_service.py first, then propose the new design and
+get approval before writing code.
+
+### Tests
+Run: venv\Scripts\python.exe -m pytest test_features.py test_e2e.py -x -q
+Should pass 197 tests. Then manually test:
+- Ctrl+Space hold-to-talk (dictation)
+- F8 command mode
+- F9 prompt assist
+- Win+L to lock screen, unlock, verify hotkeys work WITHOUT needing restart
+- Sleep/wake, verify hotkeys still work
+- Check debug.log — should NOT see "Screen unlock detected — restarting"
+  since RegisterHotKey survives lock natively
+
+---
+
+## TASK 2 (do after Task 1): Fix Whisper hallucination on long dictation
+
+### Symptom
+Koda transcribes short utterances correctly but during longer dictation it
+hallucinates words. Example: said "paid in full", transcribed "patent".
+Gets worse the longer the session runs.
+
+### IMPORTANT: Check for conflicting STT software first
+Koda opens the mic in SHARED mode (sounddevice.InputStream). Another STT
+app recording simultaneously can corrupt the audio buffer and produce
+exactly this symptom. Before touching Whisper params, ask Alex to run:
+
+  Get-Process | Where-Object {$_.ProcessName -match "wispr|dragon|otter|talon|voiceattack|speech"}
+
+If another STT tool is running, that may be the whole problem.
+
+Known conflict points in Koda:
+- No detection of other STT apps (Dragon, Wispr Flow, Win+H, Otter, Talon)
+- Single-instance mutex only blocks other KODA instances (voice.py ~line 1726)
+- SAPI5 TTS read-back can clash with Windows Narrator or other TTS engines
+
+### Likely Whisper causes (diagnose before fixing)
+1. Audio buffer too long — Whisper hallucinates on audio >30s or with long
+   silences; no VAD to split on natural pauses
+2. condition_on_previous_text=True — one bad transcription poisons the next
+3. Missing hallucination suppression params (no_speech_threshold,
+   logprob_threshold, compression_ratio_threshold not tuned)
+4. Temperature too high / no fallback temperature ladder
+
+### Approach
+1. Read voice.py transcription pipeline — how audio is chunked and passed
+   to Whisper, current Whisper params
+2. Diagnose root cause
+3. Propose fix BEFORE implementing (Alex's workflow rule)
+4. Likely fix: set condition_on_previous_text=False, tune thresholds,
+   and/or add VAD chunking (faster-whisper has built-in VAD support)
+
+---
+
+## Current state
+- Branch: master, clean, up to date with origin/master
+- Koda v4.2.0, Python 3.14, venv at C:\Users\alex\Projects\koda\venv
+- 197 tests passing (test_features.py + test_e2e.py)
+- GitHub: https://github.com/Moonhawk80/koda
+- No NVIDIA GPU — Intel UHD 770 only, Whisper runs on CPU (int8)
+- Desktop path: C:\Users\alex\OneDrive\Desktop (OneDrive sync)
+- Hotkeys: Ctrl+Space=dictation, F8=command, F9=prompt assist,
+  F7=correction, F6=read back, F5=read selected
+- Alex's workflow rules: proposals before building, full drafts on edits,
+  PRs for review, run /handover at session end, git pull at start/push at end
+- Most recent handover: docs/sessions/ (check for latest session number)
 ```

@@ -15,6 +15,7 @@ import time
 import threading
 import multiprocessing
 import logging
+import ctypes
 import winsound
 import numpy as np
 import sounddevice as sd
@@ -74,6 +75,7 @@ _hotkey_proc = None       # multiprocessing.Process
 _hotkey_conn = None       # parent end of Pipe
 _hotkey_listener = None   # thread reading events from subprocess
 _hotkey_pong = threading.Event()  # set by event thread when "pong" arrives
+_last_key_event_mono = time.monotonic()  # last key delivery confirmed by hotkey service
 
 
 # ============================================================
@@ -908,7 +910,11 @@ def _hotkey_event_thread():
             if event == "ready":
                 logger.info("Hotkey service reports ready")
             elif event == "pong":
-                _hotkey_pong.set()  # Signal watchdog that service is responsive
+                _hotkey_pong.set()  # Signal watchdog that service is responsive (legacy plain string)
+            elif isinstance(event, tuple) and len(event) == 2 and event[0] == "pong":
+                _hotkey_pong.set()
+                global _last_key_event_mono
+                _last_key_event_mono = event[1]  # monotonic time of last actual key delivery
             elif event == "hooks_dead":
                 logger.warning("Hotkey service reports hooks are dead — triggering restart")
                 threading.Thread(target=setup_hotkeys, daemon=True).start()
@@ -1000,7 +1006,8 @@ def setup_hotkeys():
     Keyboard hooks run in a dedicated process so they are immune to GIL
     contention from Whisper transcription in the main process.
     """
-    global _hotkey_proc, _hotkey_conn, _hotkey_listener, _hotkeys_registered
+    global _hotkey_proc, _hotkey_conn, _hotkey_listener, _hotkeys_registered, _last_key_event_mono
+    _last_key_event_mono = time.monotonic()  # reset on restart — give new service grace period
 
     # Stop any existing service first
     _stop_hotkey_service()
@@ -1035,6 +1042,25 @@ def setup_hotkeys():
 _watchdog_running = False
 _mic_disconnected = False  # True while mic is known-dead; prevents repeated notifications
 _input_device_count = 0   # Baseline input device count; drop = physical disconnect
+_screen_was_locked = False
+
+
+def _is_screen_locked():
+    """Return True if the Windows session is currently locked.
+
+    When locked, the input desktop switches to Winlogon and is inaccessible
+    from the user session — OpenInputDesktop returns 0 or a non-Default desktop.
+    """
+    try:
+        hdesk = ctypes.windll.user32.OpenInputDesktop(0, False, 0x0001)
+        if not hdesk:
+            return True  # Can't open input desktop — session is locked
+        buf = ctypes.create_unicode_buffer(256)
+        ctypes.windll.user32.GetUserObjectInformationW(hdesk, 2, buf, ctypes.sizeof(buf), None)
+        ctypes.windll.user32.CloseDesktop(hdesk)
+        return buf.value.lower() != "default"
+    except Exception:
+        return False
 
 
 def _restart_audio_stream():
@@ -1171,6 +1197,17 @@ def _watchdog_thread():
                 last_15s_time = time.monotonic()
                 continue
 
+            # Detect screen lock/unlock — Windows corrupts keyboard modifier state
+            # on lock, breaking hotkey combinations even though the hook stays alive.
+            # Restart hotkeys immediately on unlock so state is clean.
+            global _screen_was_locked
+            locked_now = _is_screen_locked()
+            if _screen_was_locked and not locked_now:
+                logger.info("Screen unlock detected — restarting hotkeys to restore hook state")
+                setup_hotkeys()
+                update_tray("#2ecc71", "Koda: Ready")
+            _screen_was_locked = locked_now
+
             # Heartbeat every 5 minutes
             if now - last_heartbeat_time >= 300:
                 last_heartbeat_time = now
@@ -1206,6 +1243,24 @@ def _watchdog_thread():
                         except Exception as e:
                             logger.error("Hotkey ping error: %s — restarting", e)
                             setup_hotkeys()
+
+                    # Check for silent hook death: process alive, pong replies, but
+                    # Windows stopped delivering key events to the hook thread.
+                    # _last_key_event_mono is updated by catch-all keyboard.on_press
+                    # in hotkey_service; if it goes stale, the WH_KEYBOARD_LL hook is dead.
+                    secs_since_key = now - _last_key_event_mono
+                    if secs_since_key > 900:  # 15 min — almost certainly a dead hook
+                        logger.warning(
+                            "No key events for %.0fs — silent hook death detected, restarting hotkey service",
+                            secs_since_key,
+                        )
+                        setup_hotkeys()
+                        error_notify("Hotkeys recovered automatically. You're good to go.")
+                    elif secs_since_key > 600:  # 10 min — warn but don't restart yet
+                        logger.warning(
+                            "No key events for %.0fs — hook may be dead (will restart at 15 min)",
+                            secs_since_key,
+                        )
                 except Exception as e:
                     logger.error("Hotkey health check error: %s", e)
                     try:
