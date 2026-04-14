@@ -1250,6 +1250,70 @@ class TestFillerWordsManager(unittest.TestCase):
         self.assertIn("basically", result)
 
 
+class TestHotkeyParser(unittest.TestCase):
+    """Tests for hotkey_service._parse_hotkey and _trigger_vk."""
+
+    def setUp(self):
+        from hotkey_service import _parse_hotkey, _trigger_vk
+        self._parse = _parse_hotkey
+        self._trigger = _trigger_vk
+
+    def test_ctrl_space(self):
+        mods, vk = self._parse("ctrl+space")
+        self.assertEqual(vk, 0x20)
+        self.assertTrue(mods & 0x0002)  # MOD_CONTROL
+
+    def test_f8(self):
+        mods, vk = self._parse("f8")
+        self.assertEqual(vk, 0x77)
+
+    def test_ctrl_shift_period(self):
+        """DEFAULT hotkey ctrl+shift+. must parse — was silently skipped before."""
+        mods, vk = self._parse("ctrl+shift+.")
+        self.assertEqual(vk, 0xBE)          # VK_OEM_PERIOD
+        self.assertTrue(mods & 0x0002)       # MOD_CONTROL
+        self.assertTrue(mods & 0x0004)       # MOD_SHIFT
+
+    def test_ctrl_shift_z(self):
+        mods, vk = self._parse("ctrl+shift+z")
+        self.assertEqual(vk, ord('Z'))
+        self.assertTrue(mods & 0x0002)
+
+    def test_ctrl_alt_r(self):
+        mods, vk = self._parse("ctrl+alt+r")
+        self.assertEqual(vk, ord('R'))
+        self.assertTrue(mods & 0x0001)   # MOD_ALT
+        self.assertTrue(mods & 0x0002)   # MOD_CONTROL
+
+    def test_trigger_vk_period(self):
+        vk = self._trigger("ctrl+shift+.")
+        self.assertEqual(vk, 0xBE)
+
+    def test_trigger_vk_space(self):
+        vk = self._trigger("ctrl+space")
+        self.assertEqual(vk, 0x20)
+
+    def test_trigger_vk_f9(self):
+        vk = self._trigger("f9")
+        self.assertEqual(vk, 0x78)
+
+    def test_all_default_hotkeys_parseable(self):
+        """Every key in DEFAULT_CONFIG hotkeys must produce a non-zero VK."""
+        from config import DEFAULT_CONFIG
+        keys = [
+            DEFAULT_CONFIG["hotkey_dictation"],
+            DEFAULT_CONFIG["hotkey_command"],
+            DEFAULT_CONFIG.get("hotkey_correction", ""),
+            DEFAULT_CONFIG.get("hotkey_readback", ""),
+            DEFAULT_CONFIG.get("hotkey_readback_selected", ""),
+        ]
+        for hk in keys:
+            if not hk:
+                continue
+            _, vk = self._parse(hk)
+            self.assertNotEqual(vk, 0, f"hotkey '{hk}' failed to parse — VK=0")
+
+
 class TestNoKeyboardHooks(unittest.TestCase):
     """Guard: ensure no WH_KEYBOARD_LL hooks are ever re-introduced.
 
