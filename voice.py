@@ -1247,10 +1247,10 @@ def _watchdog_thread():
                             logger.error("Hotkey ping error: %s — restarting", e)
                             setup_hotkeys()
 
-                    # Check for silent hook death: process alive, pong replies, but
-                    # Windows stopped delivering key events to the hook thread.
-                    # _last_key_event_mono is updated by catch-all keyboard.on_press
-                    # in hotkey_service; if it goes stale, the WH_KEYBOARD_LL hook is dead.
+                    # Check for key-event staleness: process alive and pinging back,
+                    # but no WM_HOTKEY messages delivered for a long time. Likely the
+                    # RegisterHotKey registrations were silently dropped. _last_key_event_mono
+                    # is updated on every WM_HOTKEY receipt in hotkey_service (via pong tuple).
                     secs_since_key = now - _last_key_event_mono
                     if secs_since_key > 900:  # 15 min — almost certainly a dead hook
                         logger.warning(

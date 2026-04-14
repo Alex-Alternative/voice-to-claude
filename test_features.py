@@ -1250,5 +1250,70 @@ class TestFillerWordsManager(unittest.TestCase):
         self.assertIn("basically", result)
 
 
+class TestNoKeyboardHooks(unittest.TestCase):
+    """Guard: ensure no WH_KEYBOARD_LL hooks are ever re-introduced.
+
+    A WH_KEYBOARD_LL hook installed in a process that isn't pumping its message
+    queue blocks all keyboard input system-wide until Windows times out the hook.
+    Koda uses RegisterHotKey + GetAsyncKeyState instead — zero hooks, zero risk.
+    This test fails if any source file calls SetWindowsHookEx with WH_KEYBOARD_LL (13).
+    """
+
+    _SOURCE_FILES = [
+        "hotkey_service.py",
+        "voice.py",
+        "settings_gui.py",
+        "overlay.py",
+        "text_processing.py",
+        "updater.py",
+        "hardware.py",
+        "stats.py",
+        "history.py",
+        "plugin_manager.py",
+        "profiles.py",
+    ]
+
+    def _live_lines(self, path):
+        """Return non-comment, non-blank lines from a Python source file."""
+        lines = []
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#"):
+                        lines.append(stripped)
+        except FileNotFoundError:
+            pass
+        return lines
+
+    def test_no_set_windows_hook_ex_in_source(self):
+        """SetWindowsHookExW/A must not appear in non-comment code."""
+        offenders = []
+        for fname in self._SOURCE_FILES:
+            for line in self._live_lines(fname):
+                if "SetWindowsHookEx" in line:
+                    offenders.append(f"{fname}: {line[:80]}")
+        self.assertEqual(
+            offenders, [],
+            "WH_KEYBOARD_LL hook detected — use GetAsyncKeyState instead:\n"
+            + "\n".join(offenders),
+        )
+
+    def test_no_wh_keyboard_ll_assignment_in_source(self):
+        """WH_KEYBOARD_LL must not be assigned as a hook type in non-comment code."""
+        import re
+        # Match: SetWindowsHookEx(WH_KEYBOARD_LL or the literal 13 in a hook call
+        pattern = re.compile(r"SetWindowsHookEx[AW]?\s*\(")
+        offenders = []
+        for fname in self._SOURCE_FILES:
+            for line in self._live_lines(fname):
+                if pattern.search(line):
+                    offenders.append(f"{fname}: {line[:80]}")
+        self.assertEqual(
+            offenders, [],
+            "Direct SetWindowsHookEx call found:\n" + "\n".join(offenders),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
