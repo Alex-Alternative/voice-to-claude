@@ -2,7 +2,7 @@
 Tests for Koda Phase 2-4 features.
 
 Covers: text processing (auto-formatting, emails, numbers, dates, punctuation),
-voice commands, profile matching, and usage stats.
+voice commands, profile matching, usage stats, and formula mode.
 """
 
 import json
@@ -31,6 +31,7 @@ from text_processing import (
 )
 from voice_commands import extract_and_execute_commands
 from profiles import match_profile, deep_merge
+from formula_mode import convert_to_formula, is_formula_app
 
 
 # ============================================================
@@ -1377,6 +1378,105 @@ class TestNoKeyboardHooks(unittest.TestCase):
             offenders, [],
             "Direct SetWindowsHookEx call found:\n" + "\n".join(offenders),
         )
+
+
+class TestFormulaMode(unittest.TestCase):
+    """Tests for formula_mode.convert_to_formula (Tier 1 rules-based)."""
+
+    def test_formula_sum_basic(self):
+        self.assertEqual(convert_to_formula("sum B2 to B10"), "=SUM(B2:B10)")
+
+    def test_formula_sum_column_rows(self):
+        self.assertEqual(convert_to_formula("sum column B rows 2 to 10"), "=SUM(B2:B10)")
+
+    def test_formula_sum_total(self):
+        self.assertEqual(convert_to_formula("total A1 to A20"), "=SUM(A1:A20)")
+
+    def test_formula_average(self):
+        self.assertEqual(convert_to_formula("average of A1 to A20"), "=AVERAGE(A1:A20)")
+
+    def test_formula_average_mean(self):
+        self.assertEqual(convert_to_formula("mean of B1 to B5"), "=AVERAGE(B1:B5)")
+
+    def test_formula_count(self):
+        self.assertEqual(convert_to_formula("count B2 to B10"), "=COUNT(B2:B10)")
+
+    def test_formula_how_many(self):
+        self.assertEqual(convert_to_formula("how many values in A1 to A10"), "=COUNT(A1:A10)")
+
+    def test_formula_max(self):
+        self.assertEqual(convert_to_formula("max of C1 to C20"), "=MAX(C1:C20)")
+
+    def test_formula_min(self):
+        self.assertEqual(convert_to_formula("minimum of D1 to D5"), "=MIN(D1:D5)")
+
+    def test_formula_today(self):
+        self.assertEqual(convert_to_formula("today"), "=TODAY()")
+
+    def test_formula_now(self):
+        self.assertEqual(convert_to_formula("now"), "=NOW()")
+
+    def test_formula_if(self):
+        self.assertEqual(
+            convert_to_formula("if A1 is greater than 10 then yes else no"),
+            '=IF(A1>10,"yes","no")',
+        )
+
+    def test_formula_if_less_than(self):
+        self.assertEqual(
+            convert_to_formula("if B2 is less than 5 then low else high"),
+            '=IF(B2<5,"low","high")',
+        )
+
+    def test_formula_vlookup(self):
+        result = convert_to_formula("vlookup A1 in B1 to D10 column 2")
+        self.assertIsNotNone(result)
+        self.assertTrue(result.startswith("=VLOOKUP("))
+        self.assertIn("A1", result)
+        self.assertIn("B1:D10", result)
+
+    def test_formula_concat(self):
+        result = convert_to_formula("join A1 and B1")
+        self.assertIsNotNone(result)
+        self.assertTrue(result.startswith("=CONCAT("))
+
+    def test_formula_no_match(self):
+        self.assertIsNone(convert_to_formula("hello world"))
+
+    def test_formula_no_match_plain_sentence(self):
+        self.assertIsNone(convert_to_formula("please send the report by Friday"))
+
+    def test_formula_case_insensitive(self):
+        self.assertEqual(convert_to_formula("SUM B1 TO B10"), "=SUM(B1:B10)")
+
+    def test_formula_percentage(self):
+        result = convert_to_formula("A1 divided by B1 as percent")
+        self.assertIsNotNone(result)
+        self.assertIn("A1", result)
+        self.assertIn("B1", result)
+        self.assertIn("100", result)
+
+
+class TestFormulaAppDetection(unittest.TestCase):
+    """Tests for is_formula_app window detection."""
+
+    def test_excel_process(self):
+        self.assertTrue(is_formula_app("EXCEL.EXE", "Budget.xlsx - Excel"))
+
+    def test_excel_lowercase(self):
+        self.assertTrue(is_formula_app("excel.exe", "Book1 - Excel"))
+
+    def test_google_sheets_title(self):
+        self.assertTrue(is_formula_app("chrome.exe", "Q1 Budget - Google Sheets"))
+
+    def test_google_sheets_suffix(self):
+        self.assertTrue(is_formula_app("msedge.exe", "Expenses - Sheets"))
+
+    def test_not_formula_app(self):
+        self.assertFalse(is_formula_app("notepad.exe", "Untitled - Notepad"))
+
+    def test_not_formula_word(self):
+        self.assertFalse(is_formula_app("winword.exe", "Document1 - Word"))
 
 
 if __name__ == "__main__":

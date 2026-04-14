@@ -29,7 +29,8 @@ from config import load_config, save_config, open_config_file
 from text_processing import process_text, apply_custom_vocabulary
 from history import init_db, save_transcription
 from overlay import KodaOverlay
-from profiles import ProfileMonitor
+from profiles import ProfileMonitor, get_active_window_info
+from formula_mode import convert_to_formula, is_formula_app
 from voice_commands import extract_and_execute_commands
 from stats import init_stats_db as init_stats, log_transcription_stats, log_command_stats
 from plugin_manager import PluginManager
@@ -267,11 +268,15 @@ def load_whisper_model():
 
     base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     bundled = os.path.join(base_dir, f"_model_{model_size}")
+    logger.debug("Model search: base_dir=%s, bundled_path=%s, exists=%s",
+                 base_dir, bundled, os.path.isdir(bundled))
 
     def _load(m_size, dev, c_type):
         b = os.path.join(base_dir, f"_model_{m_size}")
         if os.path.isdir(b):
+            logger.debug("Loading bundled model from: %s", b)
             return WhisperModel(b, device=dev, compute_type=c_type)
+        logger.debug("Bundled model not found at %s — loading by name (may download)", b)
         return WhisperModel(m_size, device=dev, compute_type=c_type)
 
     try:
@@ -715,6 +720,19 @@ def _transcribe_and_paste():
                         pass
                     update_tray("#2ecc71", "Koda: Ready")
                     return
+
+            # Formula mode: if active window is Excel/Sheets and formula mode enabled
+            if config.get("formula_mode", {}).get("enabled", False):
+                try:
+                    proc_name, win_title = get_active_window_info()
+                    if is_formula_app(proc_name, win_title):
+                        llm_enabled = config.get("llm_polish", {}).get("enabled", False)
+                        llm_cfg = config.get("llm_polish", {}) if llm_enabled else None
+                        formula = convert_to_formula(processed, llm_enabled=llm_enabled, llm_config=llm_cfg)
+                        if formula is not None:
+                            processed = formula
+                except Exception as e:
+                    logger.debug("Formula mode error: %s", e)
 
             last_transcription = processed
 

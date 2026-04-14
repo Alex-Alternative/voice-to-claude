@@ -121,6 +121,7 @@ class KodaSettings(tk.Tk):
             ("voice_commands",                  "voicecmds_var",   "Voice commands  (select all, undo, new line)", True, None),
             ("profiles_enabled",                "profiles_var",    "Per-app profiles  (auto-switch by window)", True, None),
             ("post_processing.code_vocabulary", "code_var",        "Code vocabulary  (command mode symbols)", False, "post_processing"),
+            ("formula_mode.enabled",            "formula_var",     "Formula mode  (Excel / Google Sheets)", False, "formula_mode"),
         ]
         for cfg_key, attr, label, default, section in checks:
             if section:
@@ -342,6 +343,9 @@ class KodaSettings(tk.Tk):
         tts = cfg.setdefault("tts", {})
         tts["voice"] = self.voice_var.get()
         tts["rate"] = self.speed_var.get()
+
+        formula = cfg.setdefault("formula_mode", {})
+        formula["enabled"] = self.formula_var.get()
 
         cfg["snippets"] = self._snippets
         save_config(cfg)

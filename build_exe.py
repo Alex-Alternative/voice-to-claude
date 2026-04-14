@@ -34,6 +34,7 @@ DATA_FILES = [
     "hotkey_service.py",
     "prompt_assist.py",
     "updater.py",
+    "formula_mode.py",
     "generate_icon.py",
     "custom_words.json",
     "profiles.json",

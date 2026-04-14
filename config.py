@@ -69,6 +69,10 @@ DEFAULT_CONFIG = {
         "enabled": False,
         "target_language": "English",
     },
+    "formula_mode": {
+        "enabled": False,
+        "auto_detect_apps": True,
+    },
 }
 
 

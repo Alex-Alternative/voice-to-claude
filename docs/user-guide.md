@@ -95,6 +95,28 @@ Make sure your microphone is set as the **default recording device** in Windows:
 
 ---
 
+## Formula Mode (Excel & Google Sheets)
+
+Koda can convert spoken descriptions into Excel / Google Sheets formulas. Enable it in **Settings → Formula mode**.
+
+When formula mode is on and you're in Excel or Google Sheets, speak naturally and Koda types the formula for you:
+
+| What you say | What Koda types |
+|---|---|
+| sum B2 to B10 | `=SUM(B2:B10)` |
+| average of A1 to A20 | `=AVERAGE(A1:A20)` |
+| max of C1 to C20 | `=MAX(C1:C20)` |
+| today | `=TODAY()` |
+| if A1 is greater than 10 then yes else no | `=IF(A1>10,"yes","no")` |
+| vlookup A1 in B1 to D10 column 2 | `=VLOOKUP(A1,B1:D10,2,0)` |
+| count B2 to B10 | `=COUNT(B2:B10)` |
+
+**If your phrase doesn't match a formula pattern**, Koda pastes the transcription as normal text — so regular dictation in Excel still works.
+
+**For complex formulas**, install [Ollama](https://ollama.com) (free, local AI) and enable **LLM Polish** in Settings. Run `ollama pull phi3:mini` once to set it up.
+
+---
+
 ## Troubleshooting
 
 **Koda isn't pasting anything**

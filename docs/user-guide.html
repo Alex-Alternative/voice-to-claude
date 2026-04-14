@@ -319,6 +319,25 @@
       <div class="tip"><strong>Biggest factor:</strong> A quiet environment matters more than mic quality. Background noise reduces accuracy more than anything else.</div>
       <div class="warning"><strong>Make sure your mic is set as the default recording device in Windows:</strong><br>Right-click the speaker icon → Sound settings → Choose your input device</div>
 
+      <h2>Formula Mode (Excel &amp; Google Sheets)</h2>
+      <p>Koda can convert spoken descriptions into Excel / Google Sheets formulas. Enable it in <strong>Settings → Formula mode</strong>.</p>
+      <p>When formula mode is on and you're in Excel or Google Sheets, speak naturally and Koda types the formula:</p>
+      <table class="mic-table">
+        <tr>
+          <th>What you say</th>
+          <th>What Koda types</th>
+        </tr>
+        <tr><td>sum B2 to B10</td><td><kbd>=SUM(B2:B10)</kbd></td></tr>
+        <tr><td>average of A1 to A20</td><td><kbd>=AVERAGE(A1:A20)</kbd></td></tr>
+        <tr><td>max of C1 to C20</td><td><kbd>=MAX(C1:C20)</kbd></td></tr>
+        <tr><td>today</td><td><kbd>=TODAY()</kbd></td></tr>
+        <tr><td>if A1 is greater than 10 then yes else no</td><td><kbd>=IF(A1&gt;10,"yes","no")</kbd></td></tr>
+        <tr><td>vlookup A1 in B1 to D10 column 2</td><td><kbd>=VLOOKUP(A1,B1:D10,2,0)</kbd></td></tr>
+        <tr><td>count B2 to B10</td><td><kbd>=COUNT(B2:B10)</kbd></td></tr>
+      </table>
+      <div class="tip"><strong>No match?</strong> If your phrase doesn't match a formula pattern, Koda pastes it as normal text — so regular dictation in Excel still works.</div>
+      <div class="tip"><strong>Complex formulas:</strong> Install <a href="https://ollama.com" target="_blank">Ollama</a> (free, local AI) and enable LLM Polish in Settings. Run <code>ollama pull phi3:mini</code> once to set it up.</div>
+
       <h2>Troubleshooting</h2>
 
       <div class="troubleshoot-item">

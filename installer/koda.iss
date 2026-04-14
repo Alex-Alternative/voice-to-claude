@@ -1,8 +1,8 @@
 ; Koda Installer — Inno Setup Script
 ; Packages Koda.exe into a proper Windows installer with:
 ;   - Start menu shortcut
-;   - Desktop shortcut (optional)
 ;   - Auto-start on login (optional)
+;   - Custom wizard pages (mic guidance, activation, quality, formula mode)
 ;   - Uninstaller
 ;
 ; Build: "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" koda.iss
@@ -103,3 +103,132 @@ Type: files; Name: "{app}\koda_history.db"
 Type: dirifempty; Name: "{app}\plugins"
 Type: dirifempty; Name: "{app}\sounds"
 Type: dirifempty; Name: "{app}"
+
+[Code]
+{ ------------------------------------------------------------------ }
+{ Custom wizard pages                                                  }
+{   Page 1 — Microphone guidance (informational)                      }
+{   Page 2 — Activation method: Hold vs Toggle                        }
+{   Page 3 — Transcription quality (small / base / tiny)              }
+{   Page 4 — Formula mode for Excel / Google Sheets                   }
+{ ------------------------------------------------------------------ }
+
+var
+  MicPage:       TOutputMsgWizardPage;
+  HotkeyPage:    TInputOptionWizardPage;
+  ModelPage:     TInputOptionWizardPage;
+  FormulaPage:   TInputOptionWizardPage;
+
+procedure InitializeWizard();
+var
+  MicMsg: String;
+begin
+  { PAGE 1 — Microphone guidance }
+  MicMsg :=
+    'Koda will use your Windows default microphone.' + #13#10 +
+    'You can change this in Settings after installation.' + #13#10 + #13#10 +
+    'What to expect with different microphones:' + #13#10 + #13#10 +
+    '  Built-in laptop microphone' + #13#10 +
+    '    Works well. Background noise may reduce accuracy.' + #13#10 +
+    '    Best results in a quiet room.' + #13#10 + #13#10 +
+    '  USB headset / earbuds' + #13#10 +
+    '    Good quality. Affordable ($15-40).' + #13#10 + #13#10 +
+    '  Dedicated USB microphone' + #13#10 +
+    '    Best accuracy. ($50-100, e.g. Blue Yeti, HyperX SoloCast)' + #13#10 + #13#10 +
+    'Tip: A quiet environment matters more than mic quality.' + #13#10 + #13#10 +
+    'Make sure your mic is set as the default recording device' + #13#10 +
+    'in Windows Sound Settings (right-click speaker icon → Sound settings).';
+
+  MicPage := CreateOutputMsgPage(
+    wpSelectTasks,
+    'Your Microphone',
+    'Koda works with any Windows microphone.',
+    MicMsg
+  );
+
+  { PAGE 2 — Activation method }
+  HotkeyPage := CreateInputOptionPage(
+    MicPage.ID,
+    'Activation Method',
+    'How would you like to start voice input?',
+    'Choose how you use Ctrl+Space to dictate:',
+    True,   { exclusive — radio buttons }
+    False   { not a list box }
+  );
+  HotkeyPage.Add('Hold to talk  (Recommended)');
+  HotkeyPage.Add('Toggle on/off');
+  HotkeyPage.Values[0] := True;  { default: Hold }
+
+  { PAGE 3 — Transcription quality }
+  ModelPage := CreateInputOptionPage(
+    HotkeyPage.ID,
+    'Transcription Quality',
+    'How accurate should speech recognition be?',
+    'Choose your transcription quality (can be changed later in Settings):',
+    True,
+    False
+  );
+  ModelPage.Add('Accurate  (Recommended) — Built-in model, works without internet');
+  ModelPage.Add('Balanced — Downloads ~150 MB on first launch');
+  ModelPage.Add('Fast — Downloads ~75 MB on first launch, lower accuracy');
+  ModelPage.Values[0] := True;  { default: Accurate / small — the bundled model }
+
+  { PAGE 4 — Formula mode }
+  FormulaPage := CreateInputOptionPage(
+    ModelPage.ID,
+    'Formula Assistant',
+    'Speak Excel and Google Sheets formulas naturally.',
+    'Enable formula mode?',
+    True,
+    False
+  );
+  FormulaPage.Add('Enable formula mode');
+  FormulaPage.Add('Disable (I don''t use Excel or Google Sheets)');
+  FormulaPage.Values[1] := True;  { default: disabled — user opts in }
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  HotkeyMode, ModelSize: String;
+  FormulaEnabled: String;
+  ConfigDir, ConfigFile, ConfigContent: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    { Hotkey mode }
+    if HotkeyPage.Values[0] then
+      HotkeyMode := 'hold'
+    else
+      HotkeyMode := 'toggle';
+
+    { Model size }
+    if ModelPage.Values[0] then
+      ModelSize := 'small'
+    else if ModelPage.Values[1] then
+      ModelSize := 'base'
+    else
+      ModelSize := 'tiny';
+
+    { Formula mode }
+    if FormulaPage.Values[0] then
+      FormulaEnabled := 'true'
+    else
+      FormulaEnabled := 'false';
+
+    { Write config.json to %APPDATA%\Koda\ — only on fresh install }
+    ConfigDir := ExpandConstant('{userappdata}') + '\Koda';
+    ForceDirectories(ConfigDir);
+    ConfigFile := ConfigDir + '\config.json';
+
+    if not FileExists(ConfigFile) then
+    begin
+      ConfigContent :=
+        '{' + #13#10 +
+        '  "hotkey_mode": "' + HotkeyMode + '",' + #13#10 +
+        '  "model_size": "' + ModelSize + '",' + #13#10 +
+        '  "formula_mode": {"enabled": ' + FormulaEnabled + ', "auto_detect_apps": true}' + #13#10 +
+        '}';
+      SaveStringToFile(ConfigFile, ConfigContent, False);
+    end;
+  end;
+end;
