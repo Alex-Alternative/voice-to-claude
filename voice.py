@@ -37,9 +37,20 @@ from prompt_assist import refine_prompt
 from updater import check_for_update, open_releases_page
 
 
+# --- Data directory (source vs frozen exe) ---
+def _get_data_dir():
+    if getattr(sys, "frozen", False):
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        d = os.path.join(base, "Koda")
+        os.makedirs(d, exist_ok=True)
+        return d
+    return os.path.dirname(os.path.abspath(__file__))
+
+_DATA_DIR = _get_data_dir()
+
 # --- Logging ---
 logging.basicConfig(
-    filename=os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug.log"),
+    filename=os.path.join(_DATA_DIR, "debug.log"),
     level=logging.WARNING,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
@@ -965,7 +976,7 @@ def _hotkey_event_thread():
 
 def _build_hotkey_config():
     """Build the config dict sent to the hotkey service subprocess."""
-    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug.log")
+    log_path = os.path.join(_DATA_DIR, "debug.log")
     return {
         "hotkey_dictation": config.get("hotkey_dictation", "ctrl+space"),
         "hotkey_command": config.get("hotkey_command", "f8"),
@@ -1697,7 +1708,7 @@ def run_setup():
     logger.info("Koda v%s fully initialized", VERSION)
 
     # First-run welcome — show hotkey cheat sheet on first launch
-    _first_run_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".koda_initialized")
+    _first_run_path = os.path.join(_DATA_DIR, ".koda_initialized")
     if not os.path.exists(_first_run_path):
         try:
             with open(_first_run_path, "w") as f:

@@ -51,6 +51,8 @@ args = [
     # Bundle sounds directory and plugins
     f"--add-data={os.path.join(SCRIPT_DIR, 'sounds')};sounds",
     f"--add-data={os.path.join(SCRIPT_DIR, 'plugins')};plugins",
+    # Bundle faster_whisper VAD model (required for transcription)
+    f"--add-data={os.path.join(SCRIPT_DIR, 'venv/Lib/site-packages/faster_whisper/assets')};faster_whisper/assets",
     # Hidden imports for pystray, PIL, pyttsx3, multiprocessing
     "--hidden-import=pystray._win32",
     "--hidden-import=PIL._tkinter_finder",

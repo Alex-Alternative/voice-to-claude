@@ -5,8 +5,22 @@ Loads/saves config.json with sensible defaults.
 
 import json
 import os
+import sys
 
-CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def _resolve_config_dir():
+    if getattr(sys, "frozen", False):
+        # Running as PyInstaller --onefile exe — store config in APPDATA\Koda
+        # (the exe extracts to a temp _MEIPASS dir, which is wrong for persistent data)
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        d = os.path.join(base, "Koda")
+        os.makedirs(d, exist_ok=True)
+        return d
+    # Running from source — config lives in the project root next to this file
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+CONFIG_DIR = _resolve_config_dir()
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 
 DEFAULT_CONFIG = {
