@@ -131,6 +131,103 @@ will look like (describe each page's caption, sub-caption, and options).
 - No customization wizard pages yet — those are what this session adds
 - The existing [Tasks] in koda.iss (desktop shortcut + autostart) stay as-is
 
+---
+
+## TASK 2 — Formula mode (Excel / Google Sheets)
+
+Do this AFTER Task 1 is done and the installer wizard is working.
+
+### Goal
+When a user is in Excel or Google Sheets and presses Ctrl+Space, they can
+speak a formula description and Koda outputs the correct formula directly
+into the active cell. Example: "sum column B rows 2 to 10" → =SUM(B2:B10).
+
+### How it works
+Formula mode is a per-app profile (Phase 11, profiles already built).
+When the active window is Excel or a browser tab with Sheets:
+- Transcribed text is passed through a formula converter before pasting
+- The converter returns a formula string starting with "=" if it matches
+- If it doesn't match a formula pattern, paste the raw transcription as-is
+  (so regular dictation still works in Excel cells)
+
+### Architecture
+New file: formula_mode.py
+  convert_to_formula(text: str, llm_enabled: bool) -> str | None
+    Returns a formula string if text matches a known pattern, else None.
+
+Two-tier conversion:
+  Tier 1 — Rules-based (always available, no dependencies)
+    A lookup/regex map covering the most common formulas:
+      sum / total / add up        → =SUM(...)
+      average / mean              → =AVERAGE(...)
+      count / how many            → =COUNT(...) / =COUNTA(...)
+      max / maximum / highest     → =MAX(...)
+      min / minimum / lowest      → =MIN(...)
+      if [condition] then [a] else [b] → =IF(...)
+      vlookup / look up           → =VLOOKUP(...)
+      concatenate / join          → =CONCAT(...) / =TEXTJOIN(...)
+      today / now                 → =TODAY() / =NOW()
+      percentage / percent of     → =(x/y)*100
+    Range parsing: "column B rows 2 to 10" → B2:B10
+                   "B2 through B10"        → B2:B10
+                   "B2 to B10"             → B2:B10
+                   "A1 to D20"             → A1:D20
+
+  Tier 2 — Ollama LLM (if llm_polish.enabled = true in config)
+    If Tier 1 returns None (no rule matched), send to Ollama with prompt:
+      "Convert this natural language description to an Excel formula.
+       Return ONLY the formula starting with =, nothing else.
+       If you cannot convert it, return the original text unchanged.
+       Input: {text}"
+    Use the same Ollama endpoint as llm_polish (localhost:11434).
+    Model: config["llm_polish"]["model"] (default phi3:mini).
+    If Ollama is not running or returns non-formula text, fall back to
+    raw transcription paste (never fail silently or paste nothing).
+
+### Per-app profile wiring
+In profiles.py / voice.py, add "formula" as a recognized profile mode.
+When the active window matches:
+  Excel: executable = EXCEL.EXE
+  Google Sheets: window title contains "Google Sheets" or "- Sheets"
+Auto-activate the formula profile (if user has enabled it in Settings).
+
+Add a toggle in Settings → Profiles tab: "Formula mode for Excel / Sheets"
+(checkbox, default off — user opts in).
+
+### Installer page addition (add to Task 1's installer wizard)
+Add a 4th page at the end of the wizard:
+
+PAGE 4 — "Formula assistant for Excel & Google Sheets"
+  Checkbox: "Enable formula mode (speak formulas naturally)"  ← default ON
+  Text below checkbox:
+    "Say things like 'sum column B rows 2 to 10' and Koda types =SUM(B2:B10).
+     Works out of the box. For complex formulas, install Ollama (free, local AI):
+     ollama.com — then run: ollama pull phi3:mini"
+  Saves formula_mode_enabled = true/false to config.json.
+
+### Config change
+Add to DEFAULT_CONFIG in config.py:
+  "formula_mode": {
+    "enabled": False,
+    "auto_detect_apps": True,
+  }
+
+### Proposal rule
+Read profiles.py and voice.py transcription pipeline before proposing.
+Propose the full design (formula_mode.py structure + profile wiring +
+Settings toggle) and get approval before writing any code.
+
+### Tests
+Add to test_features.py:
+  - test_formula_sum_basic: "sum B2 to B10" → =SUM(B2:B10)
+  - test_formula_average: "average of A1 to A20" → =AVERAGE(A1:A20)
+  - test_formula_if: "if A1 is greater than 10 then yes else no" → =IF(A1>10,"yes","no")
+  - test_formula_no_match: "hello world" → None (raw paste)
+  - test_formula_today: "today" → =TODAY()
+  - test_formula_vlookup: basic vlookup description → =VLOOKUP(...)
+
+Run full suite after: venv/Scripts/python -m pytest test_features.py test_e2e.py -q
+
 Run /handover at session end.
 ```
 
