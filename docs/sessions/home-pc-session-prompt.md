@@ -125,11 +125,38 @@ will look like (describe each page's caption, sub-caption, and options).
 - config.py                   — DEFAULT_CONFIG reference (model_size, hotkey_mode)
 - %APPDATA%\Koda\config.json  — written at install time, read by Koda on launch
 
+### Bug fixes to include (discovered from coworker install test 2026-04-14)
+
+FIX 1 — Remove desktop shortcut from installer
+  The koda.ico has a transparent background that looks broken on light
+  desktops. The desktop shortcut is also unnecessary — Koda lives in the
+  tray, not on the desktop. Remove the desktopicon task from koda.iss
+  entirely (delete the [Tasks] entry and the [Icons] entry for autodesktop).
+  The Start Menu shortcut stays.
+
+FIX 2 — Suppress "no internet connection" error on startup
+  The updater (updater.py) checks GitHub for updates on launch. On machines
+  without internet access or with restrictive firewalls it throws a visible
+  error. Fix: wrap the update check in a try/except that fails silently —
+  log to debug.log but show nothing to the user. Update checks are a nice-
+  to-have, not a requirement. Read updater.py first to find the check.
+
+FIX 3 — "Loading model" tooltip stuck (investigate first)
+  Coworker saw "loading model" in the tray tooltip and Koda never became
+  ready. On first launch from a --onefile PyInstaller exe, extraction of
+  530MB takes 2-3 minutes — this may be normal slowness, not a bug. But
+  if the tray tooltip never changes even after 5 minutes, the model path
+  resolution is broken in the frozen exe. Read voice.py to find where the
+  model is loaded and how the path is resolved when frozen (sys._MEIPASS).
+  Verify the _model_small directory is being found correctly. Add a debug
+  log line showing the resolved model path on startup so future issues are
+  easier to diagnose.
+
 ### Current state
 - KodaSetup-4.2.0.exe was built on the work PC (C:\Users\alex\) 2026-04-14
 - Exe has the staleness fix (hotkey_service.py line 305)
 - No customization wizard pages yet — those are what this session adds
-- The existing [Tasks] in koda.iss (desktop shortcut + autostart) stay as-is
+- Desktop shortcut task exists in koda.iss but should be removed (see Fix 1)
 
 ---
 
