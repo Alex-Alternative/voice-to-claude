@@ -31,7 +31,7 @@ from text_processing import (
 )
 from voice_commands import extract_and_execute_commands
 from profiles import match_profile, deep_merge
-from formula_mode import convert_to_formula, is_formula_app
+from formula_mode import convert_to_formula, is_formula_app, execute_excel_action, _normalize, _try_navigate, _try_create_table
 
 
 # ============================================================
@@ -1477,6 +1477,339 @@ class TestFormulaAppDetection(unittest.TestCase):
 
     def test_not_formula_word(self):
         self.assertFalse(is_formula_app("winword.exe", "Document1 - Word"))
+
+
+# ============================================================
+# Excel Actions — normalize, navigation, table creation
+# ============================================================
+
+class TestNormalizePhoneticCellRefs(unittest.TestCase):
+    """Tests for _normalize() phonetic cell reference handling added in session 30."""
+
+    def test_phonetic_bee_5(self):
+        self.assertEqual(_normalize("go to bee 5"), "go to B5")
+
+    def test_phonetic_see_10(self):
+        self.assertEqual(_normalize("go to see 10"), "go to C10")
+
+    def test_phonetic_dee_3(self):
+        self.assertEqual(_normalize("go to dee 3"), "go to D3")
+
+    def test_phonetic_ay_1(self):
+        self.assertEqual(_normalize("go to ay 1"), "go to A1")
+
+    def test_phonetic_column_still_works(self):
+        # Existing behaviour must not regress
+        self.assertEqual(_normalize("sum column see"), "sum column C")
+
+    def test_phonetic_column_with_row_range(self):
+        self.assertEqual(_normalize("column see rows 2 to 10"), "column C rows 2 to 10")
+
+    def test_trailing_punct_stripped(self):
+        self.assertEqual(_normalize("go to B5."), "go to B5")
+
+    def test_real_letter_unchanged(self):
+        # "B5" is already correct — must not be mangled
+        self.assertEqual(_normalize("go to B5"), "go to B5")
+
+    def test_non_phonetic_word_unchanged(self):
+        # "row 5" — "row" is not in the phonetic map
+        self.assertEqual(_normalize("go to row 5"), "go to row 5")
+
+
+class TestNavigationPatterns(unittest.TestCase):
+    """Tests for _try_navigate() — pattern matching only, COM calls are mocked."""
+
+    def _xl(self):
+        from unittest.mock import MagicMock
+        xl = MagicMock()
+        xl.ActiveSheet.UsedRange.Rows.Count = 100
+        return xl
+
+    # --- Cell navigation ---
+    def test_go_to_cell(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "go to B5"))
+        xl.ActiveSheet.Range("B5").Select.assert_called_once()
+
+    def test_navigate_to_cell(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "navigate to A1"))
+
+    def test_jump_to_cell(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "jump to C10"))
+
+    def test_move_to_cell(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "move to D4"))
+
+    def test_select_cell(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "select B2"))
+
+    def test_cell_ref_uppercased(self):
+        xl = self._xl()
+        _try_navigate(xl, "go to b5")
+        xl.ActiveSheet.Range("B5").Select.assert_called_once()
+
+    # --- Column navigation ---
+    def test_select_column(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "select column C"))
+        xl.ActiveSheet.Columns("C").Select.assert_called_once()
+
+    def test_go_to_column(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "go to column B"))
+
+    def test_highlight_column(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "highlight column A"))
+
+    def test_column_uppercased(self):
+        xl = self._xl()
+        _try_navigate(xl, "select column c")
+        xl.ActiveSheet.Columns("C").Select.assert_called_once()
+
+    # --- Row navigation ---
+    def test_select_row(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "select row 5"))
+        xl.ActiveSheet.Rows(5).Select.assert_called_once()
+
+    def test_go_to_row(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "go to row 10"))
+
+    def test_navigate_to_row(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "navigate to row 3"))
+
+    # --- Home / A1 ---
+    def test_go_home(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "go home"))
+        xl.ActiveSheet.Range("A1").Select.assert_called_once()
+
+    def test_go_to_first_cell(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "go to first cell"))
+
+    def test_go_to_the_top(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "go to the top"))
+
+    def test_go_to_beginning(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "go to the beginning"))
+
+    # --- Last row ---
+    def test_go_to_last_row(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "go to last row"))
+
+    def test_go_to_the_last_row(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "go to the last row"))
+
+    def test_go_to_bottom(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "go to the bottom"))
+
+    def test_go_to_end(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "go to end"))
+
+    # --- Select all ---
+    def test_select_all(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "select all"))
+        xl.ActiveSheet.UsedRange.Select.assert_called_once()
+
+    def test_select_everything(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "select everything"))
+
+    def test_select_all_data(self):
+        xl = self._xl()
+        self.assertTrue(_try_navigate(xl, "select all data"))
+
+    # --- No match ---
+    def test_no_match_formula_phrase(self):
+        xl = self._xl()
+        self.assertFalse(_try_navigate(xl, "sum column C"))
+
+    def test_no_match_plain_text(self):
+        xl = self._xl()
+        self.assertFalse(_try_navigate(xl, "hello world"))
+
+    def test_no_match_empty(self):
+        xl = self._xl()
+        self.assertFalse(_try_navigate(xl, ""))
+
+
+class TestTableCreationPatterns(unittest.TestCase):
+    """Tests for _try_create_table() — pattern matching only, COM calls are mocked."""
+
+    def _xl(self):
+        from unittest.mock import MagicMock
+        xl = MagicMock()
+        xl.ActiveCell.Row = 1
+        xl.ActiveCell.Column = 1
+        return xl
+
+    # --- Basic table creation ---
+    def test_create_a_table(self):
+        xl = self._xl()
+        self.assertTrue(_try_create_table(xl, "create a table"))
+
+    def test_make_a_table(self):
+        xl = self._xl()
+        self.assertTrue(_try_create_table(xl, "make a table"))
+
+    def test_insert_a_table(self):
+        xl = self._xl()
+        self.assertTrue(_try_create_table(xl, "insert a table"))
+
+    def test_make_this_a_table(self):
+        xl = self._xl()
+        self.assertTrue(_try_create_table(xl, "make this a table"))
+
+    def test_format_as_table(self):
+        xl = self._xl()
+        self.assertTrue(_try_create_table(xl, "format as table"))
+
+    def test_insert_table_no_article(self):
+        xl = self._xl()
+        self.assertTrue(_try_create_table(xl, "insert table"))
+
+    # --- Table with named columns ---
+    def test_create_table_with_columns(self):
+        xl = self._xl()
+        self.assertTrue(_try_create_table(xl, "create a table with columns Name Date Amount"))
+
+    def test_make_table_with_columns(self):
+        xl = self._xl()
+        self.assertTrue(_try_create_table(xl, "make a table with columns First Last Email"))
+
+    def test_table_columns_written_as_headers(self):
+        xl = self._xl()
+        _try_create_table(xl, "create a table with columns Name Date Amount")
+        # First header written to active cell
+        xl.ActiveSheet.Cells(1, 1).Value  # accessed
+        calls = [str(c) for c in xl.ActiveSheet.Cells.call_args_list]
+        self.assertTrue(any("1, 1" in c or "(1, 1)" in c for c in calls))
+
+    def test_table_with_columns_comma_separated(self):
+        xl = self._xl()
+        self.assertTrue(_try_create_table(xl, "create a table with columns Name, Date, Amount"))
+
+    def test_table_with_columns_and_separator(self):
+        xl = self._xl()
+        self.assertTrue(_try_create_table(xl, "create a table with columns Name and Date and Amount"))
+
+    # --- No match ---
+    def test_no_match_formula(self):
+        xl = self._xl()
+        self.assertFalse(_try_create_table(xl, "sum column C"))
+
+    def test_no_match_navigation(self):
+        xl = self._xl()
+        self.assertFalse(_try_create_table(xl, "go to B5"))
+
+    def test_no_match_plain_text(self):
+        xl = self._xl()
+        self.assertFalse(_try_create_table(xl, "hello world"))
+
+
+class TestExecuteExcelActionNoExcel(unittest.TestCase):
+    """Tests for execute_excel_action() when Excel is not running."""
+
+    def test_returns_false_when_excel_not_running(self):
+        # In a test environment Excel is never open — must not raise, must return False
+        with patch("formula_mode._get_excel", return_value=None):
+            self.assertFalse(execute_excel_action("go to B5"))
+
+    def test_returns_false_for_formula_phrase(self):
+        with patch("formula_mode._get_excel", return_value=None):
+            self.assertFalse(execute_excel_action("sum column C"))
+
+    def test_returns_false_for_plain_text(self):
+        with patch("formula_mode._get_excel", return_value=None):
+            self.assertFalse(execute_excel_action("hello world"))
+
+
+class TestExecuteExcelActionWithMockExcel(unittest.TestCase):
+    """Tests for execute_excel_action() routing with a mocked Excel COM object."""
+
+    def _xl(self):
+        from unittest.mock import MagicMock
+        xl = MagicMock()
+        xl.ActiveSheet.UsedRange.Rows.Count = 50
+        xl.ActiveCell.Row = 1
+        xl.ActiveCell.Column = 1
+        return xl
+
+    def _run(self, text):
+        xl = self._xl()
+        with patch("formula_mode._get_excel", return_value=xl):
+            result = execute_excel_action(text)
+        return result, xl
+
+    # --- Navigation routed correctly ---
+    def test_navigation_returns_true(self):
+        result, _ = self._run("go to B5")
+        self.assertTrue(result)
+
+    def test_table_creation_returns_true(self):
+        result, _ = self._run("make a table")
+        self.assertTrue(result)
+
+    def test_formula_phrase_returns_false(self):
+        # Formulas must NOT be intercepted by execute_excel_action
+        result, _ = self._run("sum column C")
+        self.assertFalse(result)
+
+    def test_plain_text_returns_false(self):
+        result, _ = self._run("let me know when you're done")
+        self.assertFalse(result)
+
+    # --- Hallucination stripping ---
+    def test_strips_one_leading_word(self):
+        result, _ = self._run("um go to B5")
+        self.assertTrue(result)
+
+    def test_strips_two_leading_words(self):
+        result, _ = self._run("alt funding go to B5")
+        self.assertTrue(result)
+
+    def test_strips_three_leading_words(self):
+        result, _ = self._run("alt funding some go to B5")
+        self.assertTrue(result)
+
+    def test_does_not_strip_when_not_needed(self):
+        result, _ = self._run("go to A1")
+        self.assertTrue(result)
+
+    # --- Phonetic normalization flows through ---
+    def test_phonetic_cell_ref_navigates(self):
+        result, xl = self._run("go to bee 5")
+        self.assertTrue(result)
+        xl.ActiveSheet.Range("B5").Select.assert_called_once()
+
+    def test_phonetic_cell_ref_with_hallucination(self):
+        result, xl = self._run("alt funding go to bee 5")
+        self.assertTrue(result)
+
+    # --- Formula fallthrough (action returns False so formula mode takes over) ---
+    def test_formula_not_consumed_by_action(self):
+        result, _ = self._run("average of column B")
+        self.assertFalse(result)
+
+    def test_if_formula_not_consumed_by_action(self):
+        result, _ = self._run("if A1 is greater than 10 then yes else no")
+        self.assertFalse(result)
 
 
 if __name__ == "__main__":
