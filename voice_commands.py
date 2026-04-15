@@ -17,7 +17,7 @@ Examples:
 
 import re
 import time
-import pyautogui
+import keyboard
 
 
 # --- Command definitions ---
@@ -26,97 +26,100 @@ import pyautogui
 # Patterns are matched case-insensitively against the full transcription.
 # If the ENTIRE transcription is a command (or starts/ends with one),
 # the command is executed and stripped from the text output.
+#
+# Uses keyboard.send() throughout — pyautogui's synthetic Ctrl conflicts
+# with the keyboard library's hooks and causes commands like undo to silently fail.
 
 def _action_select_all():
-    pyautogui.hotkey("ctrl", "a")
+    keyboard.send("ctrl+a")
 
 def _action_copy():
-    pyautogui.hotkey("ctrl", "c")
+    keyboard.send("ctrl+c")
 
 def _action_cut():
-    pyautogui.hotkey("ctrl", "x")
+    keyboard.send("ctrl+x")
 
 def _action_paste():
-    pyautogui.hotkey("ctrl", "v")
+    keyboard.send("ctrl+v")
 
 def _action_undo():
-    pyautogui.hotkey("ctrl", "z")
+    keyboard.send("ctrl+z")
 
 def _action_redo():
-    pyautogui.hotkey("ctrl", "y")
+    keyboard.send("ctrl+y")
 
 def _action_delete():
-    pyautogui.press("delete")
+    keyboard.send("delete")
 
 def _action_backspace():
-    pyautogui.press("backspace")
+    keyboard.send("backspace")
 
 def _action_delete_word():
-    pyautogui.hotkey("ctrl", "backspace")
+    keyboard.send("ctrl+backspace")
 
 def _action_delete_line():
-    pyautogui.hotkey("home")
-    pyautogui.hotkey("shift", "end")
-    pyautogui.press("delete")
+    keyboard.send("home")
+    keyboard.send("shift+end")
+    keyboard.send("delete")
 
 def _action_enter():
-    pyautogui.press("enter")
+    keyboard.send("enter")
 
 def _action_double_enter():
-    pyautogui.press("enter")
-    pyautogui.press("enter")
+    keyboard.send("enter")
+    keyboard.send("enter")
 
 def _action_tab():
-    pyautogui.press("tab")
+    keyboard.send("tab")
 
 def _action_escape():
-    pyautogui.press("escape")
+    keyboard.send("escape")
 
 def _action_home():
-    pyautogui.press("home")
+    keyboard.send("home")
 
 def _action_end():
-    pyautogui.press("end")
+    keyboard.send("end")
 
 def _action_go_top():
-    pyautogui.hotkey("ctrl", "home")
+    keyboard.send("ctrl+home")
 
 def _action_go_bottom():
-    pyautogui.hotkey("ctrl", "end")
+    keyboard.send("ctrl+end")
 
 def _action_select_word():
-    pyautogui.hotkey("ctrl", "shift", "left")
+    keyboard.send("ctrl+shift+left")
 
 def _action_select_line():
-    pyautogui.press("home")
-    pyautogui.hotkey("shift", "end")
+    keyboard.send("home")
+    keyboard.send("shift+end")
 
 def _action_select_to_end():
-    pyautogui.hotkey("shift", "end")
+    keyboard.send("shift+end")
 
 def _action_select_to_start():
-    pyautogui.hotkey("shift", "home")
+    keyboard.send("shift+home")
 
 def _action_move_word_left():
-    pyautogui.hotkey("ctrl", "left")
+    keyboard.send("ctrl+left")
 
 def _action_move_word_right():
-    pyautogui.hotkey("ctrl", "right")
+    keyboard.send("ctrl+right")
 
 def _action_save():
-    pyautogui.hotkey("ctrl", "s")
+    keyboard.send("ctrl+s")
 
 def _action_find():
-    pyautogui.hotkey("ctrl", "f")
+    keyboard.send("ctrl+f")
 
 def _action_bold():
-    pyautogui.hotkey("ctrl", "b")
+    keyboard.send("ctrl+b")
 
 def _action_italic():
-    pyautogui.hotkey("ctrl", "i")
+    keyboard.send("ctrl+i")
 
 def _action_underline():
-    pyautogui.hotkey("ctrl", "u")
+    keyboard.send("ctrl+u")
 
 
 # Command registry: (regex_pattern, action, description)

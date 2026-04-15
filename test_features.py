@@ -348,47 +348,48 @@ class TestProcessTextPipeline(unittest.TestCase):
 class TestVoiceCommands(unittest.TestCase):
     """Test command extraction (actions mocked to avoid keyboard input)."""
 
-    @patch("voice_commands.pyautogui")
-    def test_select_all(self, mock_pyautogui):
+    @patch("voice_commands.keyboard")
+    def test_select_all(self, mock_keyboard):
         text, cmds = extract_and_execute_commands("select all")
         self.assertEqual(text, "")
         self.assertEqual(len(cmds), 1)
-        mock_pyautogui.hotkey.assert_called_with("ctrl", "a")
+        mock_keyboard.send.assert_called_with("ctrl+a")
 
-    @patch("voice_commands.pyautogui")
-    def test_undo(self, mock_pyautogui):
+    @patch("voice_commands.keyboard")
+    def test_undo(self, mock_keyboard):
         text, cmds = extract_and_execute_commands("undo")
         self.assertEqual(text, "")
         self.assertEqual(len(cmds), 1)
+        mock_keyboard.send.assert_called_with("ctrl+z")
 
-    @patch("voice_commands.pyautogui")
-    def test_new_line(self, mock_pyautogui):
+    @patch("voice_commands.keyboard")
+    def test_new_line(self, mock_keyboard):
         text, cmds = extract_and_execute_commands("new line")
         self.assertEqual(text, "")
         self.assertEqual(len(cmds), 1)
-        mock_pyautogui.press.assert_called_with("enter")
+        mock_keyboard.send.assert_called_with("enter")
 
-    @patch("voice_commands.pyautogui")
-    def test_command_with_text(self, mock_pyautogui):
+    @patch("voice_commands.keyboard")
+    def test_command_with_text(self, mock_keyboard):
         """Command at start of text — command extracted, text preserved."""
         text, cmds = extract_and_execute_commands("new line hello world")
         self.assertEqual(text, "hello world")
         self.assertEqual(len(cmds), 1)
 
-    @patch("voice_commands.pyautogui")
-    def test_no_command(self, mock_pyautogui):
+    @patch("voice_commands.keyboard")
+    def test_no_command(self, mock_keyboard):
         text, cmds = extract_and_execute_commands("hello world")
         self.assertEqual(text, "hello world")
         self.assertEqual(cmds, [])
 
-    @patch("voice_commands.pyautogui")
-    def test_empty(self, mock_pyautogui):
+    @patch("voice_commands.keyboard")
+    def test_empty(self, mock_keyboard):
         text, cmds = extract_and_execute_commands("")
         self.assertEqual(text, "")
         self.assertEqual(cmds, [])
 
-    @patch("voice_commands.pyautogui")
-    def test_command_with_period(self, mock_pyautogui):
+    @patch("voice_commands.keyboard")
+    def test_command_with_period(self, mock_keyboard):
         """Whisper often adds trailing period to commands."""
         text, cmds = extract_and_execute_commands("select all.")
         self.assertEqual(text, "")
