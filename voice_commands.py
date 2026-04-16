@@ -240,15 +240,16 @@ VOICE_COMMANDS = [
 # appear naturally at the end of a dictated sentence.
 # (Prefix matching is disabled entirely — see extract_and_execute_commands.)
 _WHOLE_UTTERANCE_ONLY = {
-    "Delete forward",    # "I need to delete" should not fire forward-delete
-    "Select all text",   # "I need to select all" should not fire Ctrl+A
-    "Undo",              # "I said undo" should not fire Ctrl+Z
-    "Redo",              # "I said redo" should not fire Ctrl+Y
-    "Copy",              # "I need to copy" should not fire Ctrl+C
-    "Cut",               # "I want to cut" should not fire Ctrl+X
-    "Paste",             # "I need to paste" should not fire Ctrl+V
-    "Save",              # "I want to save" should not fire Ctrl+S
-    "Find",              # "I need to find" should not fire Ctrl+F
+    "Delete forward",        # "I need to delete" should not fire forward-delete
+    "Delete previous word",  # "I want to delete word" should not fire Ctrl+Backspace
+    "Select all text",       # "I need to select all" should not fire Ctrl+A
+    "Undo",                  # "I said undo" should not fire Ctrl+Z
+    "Redo",                  # "I said redo" should not fire Ctrl+Y
+    "Copy",                  # "I need to copy" should not fire Ctrl+C
+    "Cut",                   # "I want to cut" should not fire Ctrl+X
+    "Paste",                 # "I need to paste" should not fire Ctrl+V
+    "Save",                  # "I want to save" should not fire Ctrl+S
+    "Find",                  # "I need to find" should not fire Ctrl+F
 }
 
 # Compile patterns

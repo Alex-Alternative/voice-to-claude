@@ -1,4 +1,15 @@
 {
   "coda": "Koda",
-  "claude code": "Claude Code"
+  "claude code": "Claude Code",
+  "git": "git",
+  "npm": "npm",
+  "grep": "grep",
+  "pwd": "pwd",
+  "chmod": "chmod",
+  "sudo": "sudo",
+  "mkdir": "mkdir",
+  "rmdir": "rmdir",
+  "bash": "bash",
+  "python": "python",
+  "pip": "pip"
 }

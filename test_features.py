@@ -473,6 +473,20 @@ class TestVoiceCommands(unittest.TestCase):
         self.assertEqual(len(cmds), 1)
 
     @patch("voice_commands.keyboard")
+    def test_delete_word_in_sentence_not_stripped2(self, mock_keyboard):
+        """'delete word' at end of sentence should NOT fire as suffix command."""
+        text, cmds, _ = extract_and_execute_commands("I want to delete word")
+        self.assertEqual(text, "I want to delete word")
+        self.assertEqual(len(cmds), 0)
+
+    @patch("voice_commands.keyboard")
+    def test_delete_word_alone_still_works(self, mock_keyboard):
+        """Bare 'delete word' as entire utterance still fires the command."""
+        text, cmds, _ = extract_and_execute_commands("delete word")
+        self.assertEqual(text, "")
+        self.assertEqual(len(cmds), 1)
+
+    @patch("voice_commands.keyboard")
     def test_gui_select_all_unchanged(self, mock_keyboard):
         """Outside terminal, 'select all' still sends Ctrl+A."""
         text, cmds, _ = extract_and_execute_commands("select all", in_terminal=False)
