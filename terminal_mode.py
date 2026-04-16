@@ -125,11 +125,22 @@ def normalize_for_terminal(text: str) -> str:
     Called after process_text() (with auto_capitalize disabled) when the
     active window is a terminal application.
     """
-    t = text.strip()
+    t = text.strip().lower()  # terminal commands are lowercase; Whisper capitalizes words
 
     # Apply symbol substitutions
     for pattern, replacement in _SUBSTITUTIONS:
         t = pattern.sub(replacement, t)
+
+    # Whisper hyphenation fixes — Whisper often outputs hyphenated compounds instead
+    # of separate words (e.g. "git dash dash version" → "get-dash-version").
+    # Fix "-dash-" → "--" (double-dash flag embedded as hyphenated word)
+    t = re.sub(r'-dash-', '--', t)
+    t = re.sub(r'-dash$', '--', t)
+    # After "--word" fix: ensure space before "--flag" ("get--version" → "get --version")
+    t = re.sub(r'(\w)--(\w)', r'\1 --\2', t)
+    # Single-letter flag hyphenated directly: "ls-l" → "ls -l"
+    # Whisper outputs "LS-L" for "ls dash l" — after lowercasing: "ls-l"
+    t = re.sub(r'\b([a-z]{2,})-([a-z])\b', r'\1 -\2', t)
 
     # "dash <letter>" → "-<letter>" for single-letter flags (ls -l, git -v, etc.)
     # Run before extension dot so "dot dash" doesn't eat the "-"

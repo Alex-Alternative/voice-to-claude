@@ -811,13 +811,24 @@ def _transcribe_and_paste():
 
 def undo_and_rerecord():
     """Undo the last paste and start a new recording."""
+    logger.info("undo_and_rerecord: last_transcription=%r recording_mode=%r", last_transcription, recording_mode)
     if last_transcription:
-        # Select all the text that was just pasted and delete it
-        # Use Ctrl+Z to undo the paste
-        keyboard.send("ctrl+z")
+        try:
+            proc_name, win_title = get_active_window_info()
+            in_terminal = is_terminal_app(proc_name, win_title)
+        except Exception:
+            in_terminal = False
+        if in_terminal:
+            # Escape = PSReadLine RevertLine — clears current input line.
+            # Ctrl+Z does nothing to synthetic pastes in terminal.
+            keyboard.send("escape")
+        else:
+            keyboard.send("ctrl+z")
         time.sleep(0.2)
-    # Start recording in the same mode as last time
-    start_recording(recording_mode)
+    # Start recording in the same mode as last time.
+    # force_vad=True so VAD auto-stops the recording in hold mode —
+    # correction mode has no hotkey release to stop it otherwise.
+    start_recording(recording_mode, force_vad=True)
 
 
 # ============================================================
@@ -1014,6 +1025,7 @@ def _hotkey_event_thread():
                 else:
                     start_recording("prompt")
             elif event == "correction":
+                logger.info("Correction mode triggered")
                 threading.Thread(target=undo_and_rerecord, daemon=True).start()
             elif event == "readback":
                 threading.Thread(target=read_back, daemon=True).start()

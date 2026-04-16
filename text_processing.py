@@ -61,6 +61,9 @@ _STUTTER_SAFE = {
     "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
     "seventeen", "eighteen", "nineteen", "hundred", "thousand", "million",
     "the", "that", "had", "is", "was", "in", "on", "to",
+    # Terminal mode: repeated words are intentional
+    "dash",  # "dash dash" → "--" (long flag)
+    "dot",   # "dot dot" → ".." (parent directory)
 }
 
 

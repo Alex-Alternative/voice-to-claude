@@ -210,8 +210,8 @@ Hold **Ctrl + Space**, speak your command naturally using words for symbols, the
 | cd slash users slash alex slash projects | `cd /users/alex/projects` |
 | cd backslash users backslash alex backslash projects | `cd \users\alex\projects` |
 | tilde slash projects slash koda | `~/projects/koda` |
-| git dash dash version | `git --version` |
-| npm install dash dash save dev | `npm install --save dev` |
+| git double dash version | `git --version` |
+| npm install double dash save dev | `npm install --save dev` |
 | ls dash l | `ls -l` |
 | dot dot slash src | `../src` |
 | cat file dot txt pipe grep error | `cat file.txt \| grep error` |
@@ -225,7 +225,7 @@ Hold **Ctrl + Space**, speak your command naturally using words for symbols, the
 | slash / forward slash | `/` |
 | backslash / back slash | `\` |
 | tilde | `~` |
-| dash dash / double dash | `--` |
+| double dash | `--` (use "double dash" not "dash dash" — Whisper compresses "dash dash" semantically) |
 | dash + letter (e.g. "dash v") | `-v` |
 | pipe | `\|` |
 | greater than | `>` |
