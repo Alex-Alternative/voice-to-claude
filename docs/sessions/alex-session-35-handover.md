@@ -104,7 +104,10 @@ now use it — 6 lines of Catppuccin boilerplate each → 1 call.
 ## Deferred — Need Design Calls
 
 - **Track 3 M2** — Merge `context_menu._run_with_preload` into `TranscribeFileWindow._run` via a `minimal=True` flag. Subagent explicitly said "not mechanical — needs a clear `minimal` flag and a decision on whether the preloaded variant should also respect timestamps." ~85 LOC savings but architectural. Worth a dedicated session where Alex reviews the flag shape.
-- **Track 6 M6** — `voice_commands._run` wants `error_notify` alongside its existing `logger.error`, but `error_notify` lives in `voice.py` and importing it into `voice_commands.py` would create a circular import (voice.py imports from voice_commands.py). Needs a notifier-plumbing pattern: either a module-level `set_notifier(fn)` setter that voice.py calls once at startup, or pass `notify=error_notify` through `extract_and_execute_commands`. Design call.
+
+## Resolved after initial handover was written
+
+- **Track 6 M6** (commit `ff4547b`) — voice_commands._run now calls `_notifier(f"Voice command failed: {desc}")` alongside the existing `logger.error`. Resolved the circular-import concern via a setter pattern: `voice_commands.py` exposes `set_notifier(fn)`; `voice.py` registers `error_notify` at module load right after defining it. Safe default: no notifier registered (tests, standalone import) → command failures still log but don't surface.
 
 ## Manual Smoke Test Required
 
