@@ -84,33 +84,23 @@ class TestFullPipelineWithMock(unittest.TestCase):
 
     def test_pipeline_whisper_segment_dedup(self):
         """Consecutive identical segments should be deduplicated."""
+        from voice import dedup_segments
         segments = [
             self._make_mock_segment("Hello world."),
             self._make_mock_segment("Hello world."),
             self._make_mock_segment("How are you?"),
         ]
-        seg_texts = []
-        for seg in segments:
-            t = seg.text.strip()
-            if t and (not seg_texts or t != seg_texts[-1]):
-                seg_texts.append(t)
-        text = " ".join(seg_texts).strip()
-        self.assertEqual(text, "Hello world. How are you?")
+        self.assertEqual(dedup_segments(segments), "Hello world. How are you?")
 
     def test_pipeline_all_empty_segments(self):
         """All empty segments should produce empty text."""
+        from voice import dedup_segments
         segments = [
             self._make_mock_segment(""),
             self._make_mock_segment("  "),
             self._make_mock_segment(""),
         ]
-        seg_texts = []
-        for seg in segments:
-            t = seg.text.strip()
-            if t and (not seg_texts or t != seg_texts[-1]):
-                seg_texts.append(t)
-        text = " ".join(seg_texts).strip()
-        self.assertEqual(text, "")
+        self.assertEqual(dedup_segments(segments), "")
 
 
 class TestConfigIntegrity(unittest.TestCase):

@@ -385,11 +385,8 @@ class KodaSettings(tk.Tk):
 
     def _open_custom_words(self):
         """Open custom_words.json in the default editor."""
-        custom_words_path = os.path.join(SCRIPT_DIR, "custom_words.json")
-        if not os.path.exists(custom_words_path):
-            with open(custom_words_path, "w", encoding="utf-8") as f:
-                json.dump({"coda": "Koda", "claude code": "Claude Code"}, f, indent=2)
-        os.startfile(custom_words_path)
+        from config import open_custom_words_file
+        open_custom_words_file()
 
     def _open_profiles(self):
         """Open profiles.json in the default editor."""

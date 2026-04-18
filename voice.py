@@ -260,6 +260,16 @@ def error_notify(message):
 # MODEL
 # ============================================================
 
+def dedup_segments(segments):
+    """Join Whisper segments, dropping consecutive duplicates (hallucination guard)."""
+    seg_texts = []
+    for seg in segments:
+        t = seg.text.strip()
+        if t and (not seg_texts or t != seg_texts[-1]):
+            seg_texts.append(t)
+    return " ".join(seg_texts).strip()
+
+
 def load_whisper_model():
     global model
     from faster_whisper import WhisperModel
@@ -655,13 +665,7 @@ def _transcribe_and_paste():
 
         # Transcribe with VAD filter + repetition penalty to prevent hallucinated repeats
         segments, info = model.transcribe(audio, **transcribe_kwargs)
-        # Deduplicate consecutive identical segments (Whisper hallucination guard)
-        seg_texts = []
-        for seg in segments:
-            t = seg.text.strip()
-            if t and (not seg_texts or t != seg_texts[-1]):
-                seg_texts.append(t)
-        text = " ".join(seg_texts).strip()
+        text = dedup_segments(segments)
         logger.debug("Whisper raw: %r", text)
 
         if not text:
