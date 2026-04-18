@@ -1543,24 +1543,6 @@ def toggle_post_processing(key):
     return handler
 
 
-def toggle_llm_polish(icon, item):
-    llm = config.setdefault("llm_polish", {"enabled": False, "model": "phi3:mini"})
-    llm["enabled"] = not llm.get("enabled", False)
-    save_config(config)
-    icon.menu = build_menu()
-
-
-def toggle_wake_word(icon, item):
-    ww = config.setdefault("wake_word", {"enabled": False, "phrase": "hey koda"})
-    ww["enabled"] = not ww.get("enabled", False)
-    save_config(config)
-    if ww["enabled"]:
-        start_wake_word_listener()
-    else:
-        stop_wake_word_listener()
-    icon.menu = build_menu()
-
-
 def toggle_output_mode(icon, item):
     current = config.get("output_mode", "auto_paste")
     config["output_mode"] = "clipboard" if current == "auto_paste" else "auto_paste"
@@ -1580,37 +1562,12 @@ def _on_profile_change(profile_name, merged_config):
         config = base_config.copy()
 
 
-def toggle_profiles(icon, item):
-    global profile_monitor
-    if config.get("profiles_enabled", True):
-        config["profiles_enabled"] = False
-        if profile_monitor:
-            profile_monitor.stop()
-            profile_monitor = None
-    else:
-        config["profiles_enabled"] = True
-        profile_monitor = ProfileMonitor(base_config, on_profile_change=_on_profile_change)
-        profile_monitor.start()
-    save_config(config)
-    icon.menu = build_menu()
-
-
 def toggle_overlay(icon, item):
     if overlay:
         overlay.toggle_visible()
         config["overlay_enabled"] = overlay.is_visible
         save_config(config)
         icon.menu = build_menu()
-
-
-def _open_custom_words():
-    """Open custom_words.json in the default editor."""
-    custom_words_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_words.json")
-    if not os.path.exists(custom_words_path):
-        import json
-        with open(custom_words_path, "w", encoding="utf-8") as f:
-            json.dump({"coda": "Koda", "claude code": "Claude Code"}, f, indent=2)
-    os.startfile(custom_words_path)
 
 
 def _open_stats():
@@ -1636,13 +1593,6 @@ def _install_context_menu():
         notify("Context menu installed! Right-click audio files to transcribe.")
     else:
         notify(f"Failed: {result.stderr[:100]}")
-
-
-def _open_profiles():
-    """Open profiles.json in the default editor."""
-    from profiles import load_profiles, PROFILES_PATH
-    load_profiles()  # Ensure file exists
-    os.startfile(PROFILES_PATH)
 
 
 def switch_mode(icon, item):
