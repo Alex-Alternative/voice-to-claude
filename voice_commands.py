@@ -18,6 +18,22 @@ Examples:
 import re
 import time
 import logging
+
+# Optional user-facing notifier — voice.py sets this at startup via set_notifier().
+# When None (e.g., in tests or standalone import), command failures log but don't
+# surface to the user. Kept None-checkable rather than hard-imported to avoid a
+# circular import (voice.py imports from voice_commands.py).
+_notifier = None
+
+
+def set_notifier(fn):
+    """Register a function called with a single string when a voice command fails.
+
+    voice.py calls this at startup with error_notify so the user sees a tray
+    notification when a command attempt didn't succeed.
+    """
+    global _notifier
+    _notifier = fn
 import ctypes
 import ctypes.wintypes
 import keyboard
@@ -307,6 +323,8 @@ def extract_and_execute_commands(text, in_terminal=False):
                 logger.debug("Voice cmd [terminal]: %r done", desc)
             except Exception as e:
                 logger.error("Voice cmd [terminal] error for %r: %s", desc, e)
+                if _notifier:
+                    _notifier(f"Voice command failed: {desc}")
         else:
             logger.debug("Voice cmd: %r -> %s | focus: hwnd=%s %r", desc, action.__name__, hwnd, title)
             try:
@@ -314,6 +332,8 @@ def extract_and_execute_commands(text, in_terminal=False):
                 logger.debug("Voice cmd: %r done", desc)
             except Exception as e:
                 logger.error("Voice cmd error for %r: %s", desc, e)
+                if _notifier:
+                    _notifier(f"Voice command failed: {desc}")
 
     executed = []
     original = text.strip()

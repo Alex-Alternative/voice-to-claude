@@ -248,6 +248,12 @@ def error_notify(message):
             pass
 
 
+# Wire error_notify into voice_commands so its failure path reaches the user
+# (direct import would cycle — voice_commands.py uses a set_notifier pattern).
+import voice_commands as _vc_mod
+_vc_mod.set_notifier(error_notify)
+
+
 # ============================================================
 # MODEL
 # ============================================================
