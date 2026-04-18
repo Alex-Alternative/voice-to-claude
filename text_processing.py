@@ -4,9 +4,12 @@ Cleans up Whisper transcription output before pasting.
 """
 
 import json
+import logging
 import os
 import re
 from datetime import datetime
+
+logger = logging.getLogger("koda")
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 FILLER_WORDS_PATH = os.path.join(_MODULE_DIR, "filler_words.json")
@@ -44,8 +47,9 @@ def load_filler_words():
                 data = json.load(f)
             if isinstance(data, list):
                 return data
-        except Exception:
-            pass
+            logger.warning("filler_words.json is not a list — using defaults")
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Could not load filler_words.json: %s — using defaults", e)
     return list(DEFAULT_FILLER_WORDS)
 
 

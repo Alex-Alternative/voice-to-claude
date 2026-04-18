@@ -8,11 +8,14 @@ config overrides that are merged on top of the base config.
 
 import ctypes
 import ctypes.wintypes
+import logging
 import os
 import re
 import json
 import threading
 import time
+
+logger = logging.getLogger("koda")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROFILES_PATH = os.path.join(SCRIPT_DIR, "profiles.json")
@@ -103,13 +106,22 @@ DEFAULT_PROFILES = {
 
 
 def load_profiles():
-    """Load profiles from profiles.json, creating default file if needed."""
+    """Load profiles from profiles.json, creating default file if needed.
+
+    On corruption: preserve the broken file as profiles.json.corrupt.<ts>
+    and write defaults — so the user can recover their customizations.
+    """
     if os.path.exists(PROFILES_PATH):
         try:
             with open(PROFILES_PATH, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
-            pass
+        except (json.JSONDecodeError, OSError) as e:
+            backup = f"{PROFILES_PATH}.corrupt.{int(time.time())}"
+            try:
+                os.replace(PROFILES_PATH, backup)
+                logger.warning("profiles.json corrupt (%s) — backed up to %s", e, backup)
+            except OSError:
+                logger.error("profiles.json corrupt (%s) and could not be backed up", e)
     # Create default profiles file
     save_profiles(DEFAULT_PROFILES)
     return DEFAULT_PROFILES.copy()

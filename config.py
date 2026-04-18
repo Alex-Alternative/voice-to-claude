@@ -106,3 +106,16 @@ def open_config_file():
     if not os.path.exists(CONFIG_PATH):
         save_config(DEFAULT_CONFIG)
     os.startfile(CONFIG_PATH)
+
+
+CUSTOM_WORDS_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "custom_words.json"
+)
+DEFAULT_CUSTOM_WORDS = {"coda": "Koda", "claude code": "Claude Code"}
+
+
+def open_custom_words_file():
+    if not os.path.exists(CUSTOM_WORDS_PATH):
+        with open(CUSTOM_WORDS_PATH, "w", encoding="utf-8") as f:
+            json.dump(DEFAULT_CUSTOM_WORDS, f, indent=2)
+    os.startfile(CUSTOM_WORDS_PATH)

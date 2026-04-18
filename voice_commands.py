@@ -351,8 +351,3 @@ def extract_and_execute_commands(text, in_terminal=False):
             return text, executed, _deferred
 
     return text, executed, None
-
-
-def get_command_list():
-    """Return a list of (pattern_description, description) for all available commands."""
-    return [(desc, desc) for _, _, desc in VOICE_COMMANDS]

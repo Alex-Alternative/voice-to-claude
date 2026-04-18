@@ -186,7 +186,7 @@ def _try_create_table(xl, text: str) -> bool:
             logger.debug("Excel action: created table with headers %s", headers)
             return True
         except Exception as e:
-            logger.debug("Table creation with headers failed: %s", e)
+            logger.warning("Table creation with headers failed: %s", e)
             return False
 
     # "create a table" / "make a table" / "make this a table" / "format as table" / "insert table"
@@ -200,7 +200,7 @@ def _try_create_table(xl, text: str) -> bool:
             logger.debug("Excel action: created table from selection")
             return True
         except Exception as e:
-            logger.debug("Table creation from selection failed: %s", e)
+            logger.warning("Table creation from selection failed: %s", e)
             return False
 
     return False

@@ -260,6 +260,16 @@ def error_notify(message):
 # MODEL
 # ============================================================
 
+def dedup_segments(segments):
+    """Join Whisper segments, dropping consecutive duplicates (hallucination guard)."""
+    seg_texts = []
+    for seg in segments:
+        t = seg.text.strip()
+        if t and (not seg_texts or t != seg_texts[-1]):
+            seg_texts.append(t)
+    return " ".join(seg_texts).strip()
+
+
 def load_whisper_model():
     global model
     from faster_whisper import WhisperModel
@@ -376,7 +386,11 @@ def init_vad():
         vad_model = None
 
 
+_vad_warned = False
+
+
 def check_vad_silence(audio_chunk):
+    global _vad_warned
     if vad_model is not None:
         try:
             chunk_size = 512
@@ -385,8 +399,10 @@ def check_vad_silence(audio_chunk):
                 result = vad_model({"speech_prob": 0.5}, segment)
                 if hasattr(result, 'get'):
                     return result.get("speech_prob", 0) > 0.5
-        except Exception:
-            pass
+        except Exception as e:
+            if not _vad_warned:
+                logger.warning("Silero VAD inference failed: %s — falling back to RMS threshold", e)
+                _vad_warned = True
     rms = np.sqrt(np.mean(audio_chunk ** 2))
     return rms > 0.01
 
@@ -655,13 +671,7 @@ def _transcribe_and_paste():
 
         # Transcribe with VAD filter + repetition penalty to prevent hallucinated repeats
         segments, info = model.transcribe(audio, **transcribe_kwargs)
-        # Deduplicate consecutive identical segments (Whisper hallucination guard)
-        seg_texts = []
-        for seg in segments:
-            t = seg.text.strip()
-            if t and (not seg_texts or t != seg_texts[-1]):
-                seg_texts.append(t)
-        text = " ".join(seg_texts).strip()
+        text = dedup_segments(segments)
         logger.debug("Whisper raw: %r", text)
 
         if not text:
@@ -1543,24 +1553,6 @@ def toggle_post_processing(key):
     return handler
 
 
-def toggle_llm_polish(icon, item):
-    llm = config.setdefault("llm_polish", {"enabled": False, "model": "phi3:mini"})
-    llm["enabled"] = not llm.get("enabled", False)
-    save_config(config)
-    icon.menu = build_menu()
-
-
-def toggle_wake_word(icon, item):
-    ww = config.setdefault("wake_word", {"enabled": False, "phrase": "hey koda"})
-    ww["enabled"] = not ww.get("enabled", False)
-    save_config(config)
-    if ww["enabled"]:
-        start_wake_word_listener()
-    else:
-        stop_wake_word_listener()
-    icon.menu = build_menu()
-
-
 def toggle_output_mode(icon, item):
     current = config.get("output_mode", "auto_paste")
     config["output_mode"] = "clipboard" if current == "auto_paste" else "auto_paste"
@@ -1578,39 +1570,6 @@ def _on_profile_change(profile_name, merged_config):
             overlay.set_state("ready", f"Profile: {profile_name}")
     else:
         config = base_config.copy()
-
-
-def toggle_profiles(icon, item):
-    global profile_monitor
-    if config.get("profiles_enabled", True):
-        config["profiles_enabled"] = False
-        if profile_monitor:
-            profile_monitor.stop()
-            profile_monitor = None
-    else:
-        config["profiles_enabled"] = True
-        profile_monitor = ProfileMonitor(base_config, on_profile_change=_on_profile_change)
-        profile_monitor.start()
-    save_config(config)
-    icon.menu = build_menu()
-
-
-def toggle_overlay(icon, item):
-    if overlay:
-        overlay.toggle_visible()
-        config["overlay_enabled"] = overlay.is_visible
-        save_config(config)
-        icon.menu = build_menu()
-
-
-def _open_custom_words():
-    """Open custom_words.json in the default editor."""
-    custom_words_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_words.json")
-    if not os.path.exists(custom_words_path):
-        import json
-        with open(custom_words_path, "w", encoding="utf-8") as f:
-            json.dump({"coda": "Koda", "claude code": "Claude Code"}, f, indent=2)
-    os.startfile(custom_words_path)
 
 
 def _open_stats():
@@ -1636,13 +1595,6 @@ def _install_context_menu():
         notify("Context menu installed! Right-click audio files to transcribe.")
     else:
         notify(f"Failed: {result.stderr[:100]}")
-
-
-def _open_profiles():
-    """Open profiles.json in the default editor."""
-    from profiles import load_profiles, PROFILES_PATH
-    load_profiles()  # Ensure file exists
-    os.startfile(PROFILES_PATH)
 
 
 def switch_mode(icon, item):

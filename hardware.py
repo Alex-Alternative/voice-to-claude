@@ -6,8 +6,6 @@ Detects NVIDIA GPU and CUDA availability to determine if Power Mode is available
 import subprocess
 import sys
 
-CUDA_DOWNLOAD_URL = "https://developer.nvidia.com/cuda-downloads"
-
 
 def detect_gpu():
     """
