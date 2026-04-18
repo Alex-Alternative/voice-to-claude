@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import time
 from datetime import datetime
 
 logger = logging.getLogger("koda")
@@ -40,7 +41,13 @@ DEFAULT_FILLER_WORDS = [
 
 
 def load_filler_words():
-    """Load filler word list from filler_words.json; fall back to defaults."""
+    """Load filler word list from filler_words.json; fall back to defaults.
+
+    On corruption (JSON decode error or non-list payload): preserve the broken
+    file as filler_words.json.corrupt.<ts> before returning defaults — so a
+    subsequent Save cannot destroy the user's tuned list. Mirrors the
+    profiles.load_profiles pattern.
+    """
     if os.path.exists(FILLER_WORDS_PATH):
         try:
             with open(FILLER_WORDS_PATH, "r", encoding="utf-8") as f:
@@ -48,8 +55,15 @@ def load_filler_words():
             if isinstance(data, list):
                 return data
             logger.warning("filler_words.json is not a list — using defaults")
+            shape_error = ValueError("not a list")
         except (json.JSONDecodeError, OSError) as e:
-            logger.warning("Could not load filler_words.json: %s — using defaults", e)
+            shape_error = e
+        backup = f"{FILLER_WORDS_PATH}.corrupt.{int(time.time())}"
+        try:
+            os.replace(FILLER_WORDS_PATH, backup)
+            logger.warning("filler_words.json corrupt (%s) — backed up to %s", shape_error, backup)
+        except OSError:
+            logger.error("filler_words.json corrupt (%s) and could not be backed up", shape_error)
     return list(DEFAULT_FILLER_WORDS)
 
 

@@ -9,8 +9,9 @@ import json
 import logging
 import os
 import sys
+import time
 
-from config import CONFIG_PATH, CUSTOM_WORDS_PATH, load_config, save_config
+from config import CONFIG_PATH, CUSTOM_WORDS_PATH, DEFAULT_CUSTOM_WORDS, load_config, save_config
 
 logger = logging.getLogger("koda")
 
@@ -675,15 +676,25 @@ class KodaSettings(tk.Tk):
     # --- Custom Vocabulary CRUD ---
 
     def _load_custom_words_data(self):
-        """Load custom_words.json into an ordered dict."""
+        """Load custom_words.json into an ordered dict.
+
+        On corruption: preserve the broken file as custom_words.json.corrupt.<ts>
+        before returning defaults — so a subsequent Save cannot destroy the
+        user's tuned vocabulary. Mirrors the profiles.load_profiles pattern.
+        """
         if os.path.exists(CUSTOM_WORDS_PATH):
             try:
                 with open(CUSTOM_WORDS_PATH, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     return dict(data) if isinstance(data, dict) else {}
             except (json.JSONDecodeError, OSError) as e:
-                logger.error("Could not load custom_words.json: %s — user will see default list", e)
-        return {"coda": "Koda", "claude code": "Claude Code"}
+                backup = f"{CUSTOM_WORDS_PATH}.corrupt.{int(time.time())}"
+                try:
+                    os.replace(CUSTOM_WORDS_PATH, backup)
+                    logger.warning("custom_words.json corrupt (%s) — backed up to %s", e, backup)
+                except OSError:
+                    logger.error("custom_words.json corrupt (%s) and could not be backed up", e)
+        return dict(DEFAULT_CUSTOM_WORDS)
 
     def _save_custom_words_data(self):
         """Write _custom_words back to custom_words.json."""
