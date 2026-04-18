@@ -334,7 +334,12 @@ def polish_with_llm(text):
         )
         result = response["message"]["content"].strip()
         return result if result else text
-    except Exception:
+    except Exception as e:
+        global _polish_warned
+        if not _polish_warned:
+            logger.warning("LLM polish failed: %s", e)
+            error_notify("LLM polish unavailable — using raw text. Is Ollama running?")
+            _polish_warned = True
         return text
 
 
@@ -359,7 +364,12 @@ def translate_with_llm(text, target_language):
         )
         result = response["message"]["content"].strip()
         return result if result else text
-    except Exception:
+    except Exception as e:
+        global _translate_warned
+        if not _translate_warned:
+            logger.warning("LLM translate failed: %s", e)
+            error_notify("LLM translate unavailable — using raw text. Is Ollama running?")
+            _translate_warned = True
         return text
 
 
@@ -379,6 +389,10 @@ def init_vad():
 
 
 _vad_warned = False
+_polish_warned = False
+_translate_warned = False
+_wake_warned = False
+_tts_warned = False
 
 
 def check_vad_silence(audio_chunk):
@@ -435,8 +449,12 @@ def start_wake_word_listener():
         wake_word_active = True
         wake_word_thread = threading.Thread(target=_wake_word_loop, daemon=True)
         wake_word_thread.start()
-    except Exception:
-        pass
+    except Exception as e:
+        global _wake_warned
+        if not _wake_warned:
+            logger.warning("Wake word init failed: %s", e, exc_info=True)
+            error_notify("Wake word unavailable — hotkey only. Check debug.log.")
+            _wake_warned = True
 
 
 def stop_wake_word_listener():
@@ -613,8 +631,10 @@ def _load_custom_words():
         import json
         with open(custom_words_path, "r", encoding="utf-8") as f:
             return json.load(f)
-    except Exception as e:
+    except (ValueError, OSError) as e:
+        # ValueError covers json.JSONDecodeError (subclass).
         logger.warning("Could not load custom words: %s", e)
+        error_notify("Custom vocabulary file is corrupt — using none. Check debug.log.")
         return {}
 
 
@@ -869,7 +889,12 @@ def _get_tts():
                     if voice_name.lower() in v.name.lower():
                         tts_engine.setProperty('voice', v.id)
                         break
-        except Exception:
+        except Exception as e:
+            global _tts_warned
+            if not _tts_warned:
+                logger.error("TTS init failed: %s", e, exc_info=True)
+                error_notify("Read-back voice unavailable. Check debug.log.")
+                _tts_warned = True
             return None
     return tts_engine
 
@@ -911,8 +936,8 @@ def read_back():
             if e:
                 e.say(text)
                 e.runAndWait()
-        except Exception:
-            pass
+        except Exception as err:
+            logger.error("TTS speak failed: %s", err, exc_info=True)
         tts_speaking = False
         update_tray("#2ecc71", "Koda: Ready")
 
@@ -951,8 +976,8 @@ def read_selected():
             if e:
                 e.say(text)
                 e.runAndWait()
-        except Exception:
-            pass
+        except Exception as err:
+            logger.error("TTS speak failed: %s", err, exc_info=True)
         tts_speaking = False
         update_tray("#2ecc71", "Koda: Ready")
 
