@@ -34,17 +34,17 @@ Ran the `forge-clean` skill on koda — a whole-codebase audit across 7 tracks (
 
 - **`toggle_overlay` (Track 1 H4)** — dead in the tray menu, but the overlay-toggle capability has no direct equivalent in settings_gui. Decision needed: delete the function AND drop the capability, or keep the function and re-wire it into `build_menu()`. Alexi to decide.
 
-## Phase 2 Backlog — Track 6 (Error Handling) HIGH Items
+## Phase 2 Applied — Track 6 HIGH (all 6)
 
-All 6 are real silent-failure bugs. Need product decisions before applying — these are behavior changes, not cleanups.
+All user-data-loss and silent-failure bugs are now loud:
 
-1. **profiles.py** — `load_profiles()` silently overwrites corrupted `profiles.json` with defaults. User's custom profiles would disappear with no warning.
-2. **text_processing.py** — similar silent overwrite pattern on a corrupt config read.
-3. **settings_gui.py** — similar silent overwrite pattern.
-4. **Excel COM table-creation** — 2 failures swallowed at `logger.debug`. Features silently don't work; user sees no error.
-5. **Silero VAD init** — errors silently degrade to cruder RMS threshold. User notices transcription quality dropped, has no way to diagnose.
+1. **profiles.json corruption** — backed up as `profiles.json.corrupt.<ts>`, warning logged, defaults written. User can recover.
+2. **filler_words.json corruption** — warning logged, defaults used.
+3. **custom_words.json corruption** — error logged, defaults shown in UI.
+4. **Excel table creation failure** — warning logged (was debug-only).
+5. **Silero VAD inference failure** — one-shot warning on first failure, fallback to RMS continues silently after.
 
-Full details in `.forge-clean/run-20260418-022925/track-6-error-handling.md`.
+Full original findings in `.forge-clean/run-20260418-022925/track-6-error-handling.md`. MEDIUM items (M1-M8) and LOW items in that report were NOT applied — they're deferred for future cleanup passes.
 
 ## Reports — all 7 tracks
 
@@ -57,15 +57,15 @@ Location: `.forge-clean/run-20260418-022925/`
 | 3. Dedup | 2 | 3 | 3 | Both applied |
 | 4. Type consolidation | 0 | 0 | 0 | N/A (plain Python, no type system) |
 | 5. Type strengthening | 0 | 2 | 0 | Out of scope (largely untyped) |
-| 6. Error handling | 6 | several | — | **Phase 2 — all flagged, none applied** |
+| 6. Error handling | 6 | 8 | 5 | **All 6 HIGH applied — data-loss bugs fixed** |
 | 7. Circular deps | 0 | 0 | 0 | Clean graph |
 
 ## What to Do Next Session
 
 1. **Decide on `toggle_overlay`** — capability gone or re-wire?
-2. **Review Track 6 HIGH items** — one-by-one. Silent JSON overwrite is the scariest (could destroy user profiles).
-3. **Merge or abandon the branch.** If Phase 1 looks good on review, `git checkout master && git merge --no-ff chore/forge-clean`. If Phase 2 is tackled separately, keep the branch open.
-4. **Clean up the `.forge-clean/` output** — add `.forge-clean/` to `.gitignore` or delete when done.
+2. **Merge the branch to master.** `git checkout master && git merge --no-ff chore/forge-clean && git push`.
+3. **(Optional) Add test for JSON-corruption recovery** — the Track 6 report suggests one: write `"{not json"` to profiles.json, restart, assert warning is logged and `.corrupt.<ts>` backup exists.
+4. **(Optional) Revisit Track 6 MEDIUM items (M1-M8)** — most are further OS/hardware boundary tightening. Listed in `.forge-clean/run-20260418-022925/track-6-error-handling.md`.
 
 ## Environment Notes (unchanged from session 19)
 
