@@ -1572,14 +1572,6 @@ def _on_profile_change(profile_name, merged_config):
         config = base_config.copy()
 
 
-def toggle_overlay(icon, item):
-    if overlay:
-        overlay.toggle_visible()
-        config["overlay_enabled"] = overlay.is_visible
-        save_config(config)
-        icon.menu = build_menu()
-
-
 def _open_stats():
     """Open the usage stats dashboard."""
     from stats_gui import StatsDashboard
