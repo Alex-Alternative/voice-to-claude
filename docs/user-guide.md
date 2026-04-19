@@ -244,6 +244,44 @@ Hold **Ctrl + Space**, speak your command naturally using words for symbols, the
 
 ---
 
+## Transcribe Audio Files (Right-Click Menu)
+
+Koda can transcribe existing audio files — voice memos, meeting recordings, podcast clips, anything. Right-click the file in Windows Explorer → **Transcribe with Koda**. A small window opens, runs the transcription, and shows the text with a Copy button.
+
+Supported formats: `.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`, `.webm`, `.wma`, `.aac`, `.opus`.
+
+### First-time setup (one-time, ~10 seconds)
+
+The right-click menu entry has to be registered once per computer:
+
+1. Open a terminal (PowerShell or cmd) in the Koda folder
+2. Run:
+   ```
+   venv\Scripts\python.exe context_menu.py install
+   ```
+3. You should see `Registered context menu for: .wav, .mp3, .m4a, ...`
+
+That's it. The entry persists across reboots and Koda restarts.
+
+### Windows 11 — "Show more options"
+
+Windows 11 hides most custom right-click entries under a secondary menu. If you right-click an audio file and don't see **Transcribe with Koda**:
+
+- Click **Show more options** at the bottom of the right-click menu, **or**
+- Hold **Shift** while right-clicking to skip straight to the full menu
+
+The entry will be in the expanded menu.
+
+### Removing the entry
+
+If you want to remove it:
+
+```
+venv\Scripts\python.exe context_menu.py uninstall
+```
+
+---
+
 ## Undoing a Paste
 
 If Koda pastes something wrong, you have three options:

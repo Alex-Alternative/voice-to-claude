@@ -238,14 +238,35 @@ def notify(message, title="Koda"):
             pass
 
 
+_pending_error_notifications = []
+
+
 def error_notify(message):
-    """Show a tray notification for errors — always shown regardless of config."""
+    """Show a tray notification for errors — always shown regardless of config.
+
+    Queues the message if called before tray_icon is initialized; flush_pending_error_notifications()
+    drains the queue once the tray is up (e.g., during startup load paths like _load_custom_words
+    that run before pystray.Icon() is constructed).
+    """
     logger.error("User notification: %s", message)
     if tray_icon:
         try:
             tray_icon.notify(message[:200], "Koda Error")
         except Exception:
             pass
+    else:
+        _pending_error_notifications.append(message)
+
+
+def flush_pending_error_notifications():
+    if not tray_icon or not _pending_error_notifications:
+        return
+    for msg in _pending_error_notifications:
+        try:
+            tray_icon.notify(msg[:200], "Koda Error")
+        except Exception:
+            pass
+    _pending_error_notifications.clear()
 
 
 # Wire error_notify into voice_commands so its failure path reaches the user
@@ -1552,11 +1573,28 @@ def _set_translation(icon, enabled, target):
     icon.menu = build_menu()
 
 
+def _open_settings_standalone():
+    """In-process path used by --settings: opens the Settings window and blocks.
+
+    Called from the frozen exe's CLI handler — the tray app cannot share a Tk
+    mainloop with pystray, so frozen-mode Settings launches a separate Koda.exe
+    process via --settings and that process ends when the window closes.
+    """
+    from settings_gui import KodaSettings
+    app = KodaSettings()
+    app.mainloop()
+
+
 def _open_settings_gui():
     """Launch the settings GUI in a separate process."""
     import subprocess
-    settings_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings_gui.py")
-    subprocess.Popen([sys.executable, settings_py])
+    if getattr(sys, "frozen", False):
+        # In the packaged exe, sys.executable is Koda.exe — spawn it with --settings
+        # so a fresh Koda.exe process opens the Settings window standalone.
+        subprocess.Popen([sys.executable, "--settings"])
+    else:
+        settings_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings_gui.py")
+        subprocess.Popen([sys.executable, settings_py])
 
 
 def toggle_setting(key):
@@ -1610,14 +1648,18 @@ def _open_transcribe_file():
 
 
 def _install_context_menu():
-    """Install the 'Transcribe with Koda' right-click context menu."""
-    import subprocess
-    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "context_menu.py")
-    result = subprocess.run([sys.executable, script, "install"], capture_output=True, text=True)
-    if result.returncode == 0:
+    """Install the 'Transcribe with Koda' right-click context menu.
+
+    Calls context_menu.install() in-process — works identically in dev (venv)
+    and frozen (Koda.exe) modes. context_menu._build_command() detects sys.frozen
+    and registers the appropriate launch command.
+    """
+    try:
+        import context_menu
+        context_menu.install()
         notify("Context menu installed! Right-click audio files to transcribe.")
-    else:
-        notify(f"Failed: {result.stderr[:100]}")
+    except Exception as e:
+        notify(f"Failed: {str(e)[:100]}")
 
 
 def switch_mode(icon, item):
@@ -1704,7 +1746,7 @@ def run_setup():
     update_tray("gray", "Koda: Loading model...")
 
     # Start floating overlay (if enabled — default on)
-    if config.get("overlay_enabled", True):
+    if config.get("overlay_enabled", False):
         overlay = KodaOverlay()
         overlay.start()
 
@@ -1753,6 +1795,16 @@ def run_setup():
 
     update_tray("#2ecc71", "Koda: Ready")
     logger.info("Koda v%s fully initialized", VERSION)
+
+    # "Koda is ready" toast — always fires regardless of config.notifications
+    # (direct tray_icon.notify bypasses the gate in notify()). Also flushes any
+    # startup-time error_notify calls that were queued before the tray went live.
+    if tray_icon:
+        try:
+            tray_icon.notify(f"Koda v{VERSION} is ready — hold Ctrl+Space to dictate.", "Koda")
+        except Exception:
+            pass
+    flush_pending_error_notifications()
 
     # First-run welcome — show hotkey cheat sheet on first launch
     _first_run_path = os.path.join(_DATA_DIR, ".koda_initialized")
@@ -1859,6 +1911,38 @@ def main():
     tray_icon.run()
 
 
+def _handle_cli_args():
+    """Handle one-shot CLI flags that exit without launching the tray app.
+
+    --transcribe <file>          open the minimal transcribe window for <file>
+    --install-context-menu       register the right-click "Transcribe with Koda" entry
+    --uninstall-context-menu     remove the right-click entry
+
+    Returns True if a flag was handled (caller should exit), False otherwise.
+    """
+    if len(sys.argv) < 2:
+        return False
+    flag = sys.argv[1]
+    if flag == "--transcribe" and len(sys.argv) >= 3:
+        import context_menu
+        context_menu.transcribe(sys.argv[2])
+        return True
+    if flag == "--install-context-menu":
+        import context_menu
+        context_menu.install()
+        return True
+    if flag == "--uninstall-context-menu":
+        import context_menu
+        context_menu.uninstall()
+        return True
+    if flag == "--settings":
+        _open_settings_standalone()
+        return True
+    return False
+
+
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    if _handle_cli_args():
+        sys.exit(0)
     main()

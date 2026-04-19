@@ -8,6 +8,10 @@ Usage:
   python context_menu.py install    — Add context menu entry
   python context_menu.py uninstall  — Remove context menu entry
   python context_menu.py transcribe <filepath>  — Transcribe a file (called by context menu)
+
+When running inside a PyInstaller-frozen Koda.exe, install() registers
+Koda.exe itself with --transcribe "%1" instead of python.exe + this script
+(there's no python interpreter on end-user machines).
 """
 
 import sys
@@ -36,11 +40,22 @@ def _get_python_exe():
     return sys.executable
 
 
-def install():
-    """Register 'Transcribe with Koda' in the Windows Explorer context menu."""
+def _build_command():
+    """Build the shell command string for the context menu entry.
+
+    Frozen (installed Koda.exe): '"<Koda.exe>" --transcribe "%1"'
+    Dev (venv python):           '"<pythonw.exe>" "<context_menu.py>" transcribe "%1"'
+    """
+    if getattr(sys, "frozen", False):
+        return f'"{sys.executable}" --transcribe "%1"', sys.executable
     python_exe = _get_python_exe()
     script_path = os.path.join(SCRIPT_DIR, "context_menu.py")
-    command = f'"{python_exe}" "{script_path}" transcribe "%1"'
+    return f'"{python_exe}" "{script_path}" transcribe "%1"', python_exe
+
+
+def install():
+    """Register 'Transcribe with Koda' in the Windows Explorer context menu."""
+    command, icon_source = _build_command()
 
     registered = []
     failed = []
@@ -51,7 +66,7 @@ def install():
             ext_key = winreg.CreateKey(winreg.HKEY_CURRENT_USER,
                                        f"Software\\Classes\\SystemFileAssociations\\{ext}\\shell\\{MENU_KEY_NAME}")
             winreg.SetValueEx(ext_key, "", 0, winreg.REG_SZ, "Transcribe with Koda")
-            winreg.SetValueEx(ext_key, "Icon", 0, winreg.REG_SZ, f"{python_exe},0")
+            winreg.SetValueEx(ext_key, "Icon", 0, winreg.REG_SZ, f"{icon_source},0")
 
             # Create command subkey
             cmd_key = winreg.CreateKey(ext_key, "command")

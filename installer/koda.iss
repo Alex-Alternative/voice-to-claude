@@ -36,7 +36,9 @@ WizardStyle=modern
 WizardImageFile=wizard_banner.bmp
 WizardSmallImageFile=wizard_small.bmp
 LicenseFile=..\LICENSE
-PrivilegesRequired=lowest
+; admin required so desktop/startup shortcuts land in {commondesktop} / {commonstartup}
+; (Public\Desktop is NOT OneDrive-synced, so shortcuts don't get the sync-status overlay)
+PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayName={#MyAppName}
@@ -55,6 +57,7 @@ VersionInfoProductVersion={#MyAppVersion}.0
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
+Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"
 Name: "autostart"; Description: "Start Koda when Windows starts"; GroupDescription: "Startup:"
 
 [Files]
@@ -84,16 +87,23 @@ Name: "{app}\plugins"; Permissions: users-modify
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\koda.ico"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 
+; Desktop shortcut — Public\Desktop (not OneDrive-synced, no blue-check overlay)
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\koda.ico"; Tasks: desktopicon
+
 ; Auto-start (optional)
 Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: autostart
 
 [Run]
+; Register right-click "Transcribe with Koda" context menu (silent, non-blocking)
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--install-context-menu"; Flags: runhidden; StatusMsg: "Registering right-click menu..."
 ; Launch after install
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 ; Kill Koda before uninstall
 Filename: "taskkill"; Parameters: "/f /im {#MyAppExeName}"; Flags: runhidden; RunOnceId: "KillKoda"
+; Unregister right-click context menu (Koda.exe still exists in {app} at this point)
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--uninstall-context-menu"; Flags: runhidden; RunOnceId: "UninstallContextMenu"
 
 [UninstallDelete]
 ; Clean up runtime files

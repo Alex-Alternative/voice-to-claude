@@ -361,7 +361,7 @@ class KodaSettings(tk.Tk):
         self._save_profiles_data()
         self._save_filler_words_data()
         if notify:
-            messagebox.showinfo("Koda", "Settings saved! Restart Koda for changes to take effect.")
+            messagebox.showinfo("Koda", "Settings saved.")
 
     def save_and_restart(self):
         self.save(notify=False)

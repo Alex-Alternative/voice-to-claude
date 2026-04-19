@@ -50,15 +50,25 @@ python generate_sounds.py
 echo.
 
 :: Download Whisper model (will be re-downloaded if user picks a different size in setup)
-echo [5/5] Downloading default speech model (first time only, ~150MB)...
+echo [5/6] Downloading default speech model (first time only, ~150MB)...
 python -c "from faster_whisper import WhisperModel; WhisperModel('base', device='cpu', compute_type='int8'); print('        Model downloaded and verified.')"
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to download Whisper model.
     pause
     exit /b 1
 )
-
 echo.
+
+:: Register right-click "Transcribe with Koda" context menu
+echo [6/7] Registering right-click context menu...
+python context_menu.py install
+echo.
+
+:: Create desktop shortcut (Koda icon, launches minimized — no cmd window flash)
+echo [7/7] Creating desktop shortcut...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\create_desktop_shortcut.ps1"
+echo.
+
 echo ============================================
 echo   Installation complete!
 echo ============================================
