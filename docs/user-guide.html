@@ -70,7 +70,26 @@
 
     h2:first-child { margin-top: 0; }
 
+    h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-top: 24px;
+      margin-bottom: 10px;
+    }
+
     p { margin-bottom: 12px; color: #333; }
+
+    ul { margin: 12px 0 12px 22px; color: #333; }
+    ul li { margin-bottom: 4px; font-size: 14px; }
+
+    code {
+      background: #f0f0f5;
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 13px;
+    }
 
     .hotkey-grid {
       display: grid;
@@ -246,7 +265,7 @@
     <div class="header">
       <h1>Koda User Guide</h1>
       <div class="subtitle">Push-to-talk voice transcription for Windows</div>
-      <div class="badge">Version 4.2.0</div>
+      <div class="badge">Version 4.3.0</div>
     </div>
 
     <div class="content">
@@ -257,7 +276,7 @@
 
       <h2>Installation</h2>
       <div class="steps">
-        <div class="step"><div class="step-num">1</div><div class="step-text">Double-click <strong>KodaSetup-4.2.0.exe</strong></div></div>
+        <div class="step"><div class="step-num">1</div><div class="step-text">Double-click <strong>KodaSetup-4.3.0.exe</strong></div></div>
         <div class="step"><div class="step-num">2</div><div class="step-text">If Windows shows a "protected your PC" warning, click <strong>More info → Run anyway</strong></div></div>
         <div class="step"><div class="step-num">3</div><div class="step-text">Follow the installer wizard — takes about 2 minutes</div></div>
         <div class="step"><div class="step-num">4</div><div class="step-text">Koda launches automatically when done</div></div>
@@ -265,6 +284,7 @@
       <div class="tip"><strong>Look for the tray icon</strong> — Koda appears in the bottom-right corner of your screen near the clock. That's how you know it's running.</div>
 
       <h2>Basic Usage</h2>
+      <h3>Dictation — type by speaking</h3>
       <div class="hotkey-grid">
         <div class="header-row">Action</div>
         <div class="header-row">What to do</div>
@@ -276,7 +296,14 @@
         <div class="cell">Release <kbd>Ctrl + Space</kbd></div>
       </div>
       <p>Your words appear in whatever app or text field was active when you pressed the hotkey.</p>
-      <div class="tip"><strong>Tips:</strong> Speak at a normal pace. Works in emails, Slack, Word, Excel, browsers, and chat apps. A quiet room gives better accuracy than an expensive microphone.</div>
+      <div class="tip"><strong>Tips:</strong>
+        <ul>
+          <li>Speak at a normal pace — no need to slow down</li>
+          <li>Works in emails, Slack, Word, Excel, browsers, chat apps — anything</li>
+          <li>A quiet room gives better accuracy than a great microphone</li>
+          <li>Built-in laptop mic works fine. A USB headset is better.</li>
+        </ul>
+      </div>
 
       <h2>All Hotkeys</h2>
       <div class="hotkey-grid">
@@ -286,13 +313,37 @@
         <div class="cell">Hold to dictate, release to paste. In a terminal window, spoken symbols are converted automatically (see Terminal Mode below)</div>
         <div class="cell"><kbd>Ctrl + F9</kbd></div>
         <div class="cell">In Excel or Google Sheets — Formula Mode (speak a formula, navigate, or create a table). Everywhere else — Prompt Assist (speak an idea, get a structured prompt for ChatGPT or Claude)</div>
-        <div class="cell"><kbd>F8</kbd></div>
-        <div class="cell">Command mode — full cleanup with filler word removal</div>
         <div class="cell"><kbd>F7</kbd></div>
         <div class="cell">Correction — undoes your last paste and starts a new recording so you can try again</div>
         <div class="cell"><kbd>F6</kbd></div>
         <div class="cell">Read back — Koda reads your last transcription aloud</div>
+        <div class="cell"><kbd>F8</kbd></div>
+        <div class="cell">Voice command mode — speak editing commands like "select all", "undo", "bold"</div>
       </div>
+
+      <h2>System Tray Menu</h2>
+      <p>Right-click the Koda tray icon for options:</p>
+      <ul>
+        <li><strong>Settings</strong> — change hotkeys, microphone, model quality, and more</li>
+        <li><strong>History</strong> — see your recent transcriptions</li>
+        <li><strong>Pause / Resume</strong> — temporarily disable Koda</li>
+        <li><strong>Quit</strong> — close Koda</li>
+      </ul>
+
+      <h2>Settings</h2>
+      <p>Open Settings by right-clicking the tray icon → <strong>Settings</strong>.</p>
+      <table class="mic-table">
+        <tr>
+          <th>Setting</th>
+          <th>What it does</th>
+        </tr>
+        <tr><td>Hotkey mode</td><td><strong>Hold</strong> (default) — hold key while speaking. <strong>Toggle</strong> — press once to start, again to stop</td></tr>
+        <tr><td>Model quality</td><td><strong>Fast</strong> (tiny), <strong>Balanced</strong> (base), <strong>Accurate</strong> (small, default)</td></tr>
+        <tr><td>Microphone</td><td>Choose which mic Koda listens to</td></tr>
+        <tr><td>Remove filler words</td><td>Automatically removes "um", "uh", "like" from transcriptions</td></tr>
+        <tr><td>Sound effects</td><td>Audio cues when recording starts and stops</td></tr>
+      </table>
+      <div class="tip"><strong>Save behavior:</strong> Clicking Save applies most changes instantly and closes the window. If you change something that needs a full restart (a hotkey, the model, or the microphone), Koda will show a small message telling you what to relaunch for.</div>
 
       <h2>Microphone Guide</h2>
       <p>You don't need an expensive microphone. Here's what to expect from each type:</p>
@@ -310,7 +361,7 @@
         <tr>
           <td>USB headset / earbuds</td>
           <td><span class="quality better">Better</span></td>
-          <td>Recommended — affordable at $15–40</td>
+          <td>Recommended — affordable at $20–40</td>
         </tr>
         <tr>
           <td>Dedicated USB mic</td>
@@ -322,26 +373,128 @@
       <div class="warning"><strong>Make sure your mic is set as the default recording device in Windows:</strong><br>Right-click the speaker icon → Sound settings → Choose your input device</div>
 
       <h2>Formula Mode (Excel &amp; Google Sheets)</h2>
-      <p>Koda can convert spoken descriptions into Excel / Google Sheets formulas. Enable it in <strong>Settings → Formula mode</strong>.</p>
-      <p>When formula mode is on and you're in Excel or Google Sheets, speak naturally and Koda types the formula:</p>
+      <p>Koda automatically detects when Excel or Google Sheets is your active window. No setup or toggle needed — just press <kbd>Ctrl + F9</kbd> and describe the formula you want.</p>
+
+      <h3>How to use it</h3>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text"><strong>Click the cell</strong> where you want the formula</div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Hold <kbd>Ctrl + F9</kbd> and speak your formula description</div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text"><strong>Release</strong> — Koda types the formula directly into the cell</div></div>
+      </div>
+      <p>That's it. You never need to know the exact formula syntax.</p>
+
+      <h3>Adding up numbers</h3>
       <table class="mic-table">
         <tr>
           <th>What you say</th>
           <th>What Koda types</th>
         </tr>
         <tr><td>sum B2 to B10</td><td><kbd>=SUM(B2:B10)</kbd></td></tr>
-        <tr><td>average of A1 to A20</td><td><kbd>=AVERAGE(A1:A20)</kbd></td></tr>
-        <tr><td>max of C1 to C20</td><td><kbd>=MAX(C1:C20)</kbd></td></tr>
-        <tr><td>today</td><td><kbd>=TODAY()</kbd></td></tr>
-        <tr><td>if A1 is greater than 10 then yes else no</td><td><kbd>=IF(A1&gt;10,"yes","no")</kbd></td></tr>
-        <tr><td>vlookup A1 in B1 to D10 column 2</td><td><kbd>=VLOOKUP(A1,B1:D10,2,0)</kbd></td></tr>
-        <tr><td>count B2 to B10</td><td><kbd>=COUNT(B2:B10)</kbd></td></tr>
+        <tr><td>sum column C</td><td><kbd>=SUM(C:C)</kbd></td></tr>
+        <tr><td>total of A1 to A20</td><td><kbd>=SUM(A1:A20)</kbd></td></tr>
+        <tr><td>what's the sum of column B</td><td><kbd>=SUM(B:B)</kbd></td></tr>
       </table>
-      <div class="tip"><strong>No match?</strong> If your phrase doesn't match a formula pattern, Koda pastes it as normal text — so regular dictation in Excel still works.</div>
-      <div class="tip"><strong>Complex formulas:</strong> Install <a href="https://ollama.com" target="_blank">Ollama</a> (free, local AI) and enable LLM Polish in Settings. Run <code>ollama pull phi3:mini</code> once to set it up.</div>
+
+      <h3>Averages, max, min</h3>
+      <table class="mic-table">
+        <tr>
+          <th>What you say</th>
+          <th>What Koda types</th>
+        </tr>
+        <tr><td>average of column B</td><td><kbd>=AVERAGE(B:B)</kbd></td></tr>
+        <tr><td>average A1 to A20</td><td><kbd>=AVERAGE(A1:A20)</kbd></td></tr>
+        <tr><td>maximum value in B2 to B10</td><td><kbd>=MAX(B2:B10)</kbd></td></tr>
+        <tr><td>top of column C</td><td><kbd>=MAX(C:C)</kbd></td></tr>
+        <tr><td>minimum of A1 to A10</td><td><kbd>=MIN(A1:A10)</kbd></td></tr>
+      </table>
+
+      <h3>Counting</h3>
+      <table class="mic-table">
+        <tr>
+          <th>What you say</th>
+          <th>What Koda types</th>
+        </tr>
+        <tr><td>count B2 to B10</td><td><kbd>=COUNT(B2:B10)</kbd></td></tr>
+        <tr><td>how many items in column A</td><td><kbd>=COUNT(A:A)</kbd></td></tr>
+        <tr><td>count non-empty cells in column C</td><td><kbd>=COUNTA(C:C)</kbd></td></tr>
+      </table>
+
+      <h3>Today's date</h3>
+      <table class="mic-table">
+        <tr>
+          <th>What you say</th>
+          <th>What Koda types</th>
+        </tr>
+        <tr><td>today</td><td><kbd>=TODAY()</kbd></td></tr>
+        <tr><td>today's date</td><td><kbd>=TODAY()</kbd></td></tr>
+      </table>
+
+      <h3>IF statements — "if this, then that"</h3>
+      <table class="mic-table">
+        <tr>
+          <th>What you say</th>
+          <th>What Koda types</th>
+        </tr>
+        <tr><td>if A1 is greater than 10 then yes else no</td><td><kbd>=IF(A1&gt;10,"yes","no")</kbd></td></tr>
+        <tr><td>if B1 is more than 100 then high else low</td><td><kbd>=IF(B1&gt;100,"high","low")</kbd></td></tr>
+        <tr><td>if C1 is less than 50 then below target</td><td><kbd>=IF(C1&lt;50,"below target","")</kbd></td></tr>
+        <tr><td>if A1 equals done then complete else pending</td><td><kbd>=IF(A1="done","complete","pending")</kbd></td></tr>
+        <tr><td>if B2 is at least 1000 then yes else no</td><td><kbd>=IF(B2&gt;=1000,"yes","no")</kbd></td></tr>
+      </table>
+      <p>Words like <em>more than, bigger than, above, over</em> all mean <code>&gt;</code>. Words like <em>at least, no less than</em> mean <code>&gt;=</code>. You don't need to remember which symbol — just say it naturally.</p>
+
+      <h3>VLOOKUP — looking up a value in a table</h3>
+      <table class="mic-table">
+        <tr>
+          <th>What you say</th>
+          <th>What Koda types</th>
+        </tr>
+        <tr><td>vlookup A1 in B1 to D10 column 2</td><td><kbd>=VLOOKUP(A1,B1:D10,2,0)</kbd></td></tr>
+      </table>
+
+      <div class="tip"><strong>Tips:</strong>
+        <ul>
+          <li><strong>Whole columns work</strong> — say "column C" instead of a range like C1:C100</li>
+          <li><strong>No Excel knowledge needed</strong> — describe what you want in plain English</li>
+          <li><strong>Regular dictation still works</strong> — if Koda doesn't recognize a formula pattern, it pastes your words as normal text, so nothing is lost</li>
+          <li><strong>Ctrl + Space in Excel = plain dictation</strong> — use this when you want to type notes or text, not formulas</li>
+        </ul>
+      </div>
+
+      <h3>Excel navigation by voice</h3>
+      <p>You can also navigate your spreadsheet with <kbd>Ctrl + F9</kbd>:</p>
+      <table class="mic-table">
+        <tr>
+          <th>What you say</th>
+          <th>What happens</th>
+        </tr>
+        <tr><td>go to B5</td><td>Selects cell B5</td></tr>
+        <tr><td>go to column C</td><td>Selects entire column C</td></tr>
+        <tr><td>go to row 5</td><td>Selects entire row 5</td></tr>
+        <tr><td>go home</td><td>Jumps to cell A1</td></tr>
+        <tr><td>go to last row</td><td>Jumps to the last row with data</td></tr>
+        <tr><td>select all</td><td>Selects entire used range</td></tr>
+      </table>
+
+      <h3>Create tables by voice</h3>
+      <table class="mic-table">
+        <tr>
+          <th>What you say</th>
+          <th>What happens</th>
+        </tr>
+        <tr><td>make a table</td><td>Converts your current selection into an Excel Table with auto-filter</td></tr>
+        <tr><td>create a table with columns Name Date Amount Status</td><td>Writes those headers at the active cell and creates the table</td></tr>
+      </table>
+
+      <div class="tip"><strong>Complex formulas:</strong> Install <a href="https://ollama.com" target="_blank">Ollama</a> (free, runs locally) and enable <strong>LLM Polish</strong> in Settings → Advanced. Run <code>ollama pull phi3:mini</code> once to set it up. Koda will use the AI model to handle anything its built-in parser can't.</div>
 
       <h2>Terminal Mode (Command Line)</h2>
       <p>When you use <kbd>Ctrl + Space</kbd> inside a terminal (Windows Terminal, PowerShell, Command Prompt, Git Bash, WSL), Koda automatically converts spoken symbols into shell syntax. No setup needed — it activates whenever a terminal is the active window.</p>
+
+      <h3>How to use it</h3>
+      <p>Hold <kbd>Ctrl + Space</kbd>, speak your command naturally using words for symbols, then release.</p>
+
+      <h3>What you can say</h3>
       <table class="mic-table">
         <tr>
           <th>What you say</th>
@@ -349,51 +502,122 @@
         </tr>
         <tr><td>cd slash users slash alex slash projects</td><td><kbd>cd /users/alex/projects</kbd></td></tr>
         <tr><td>cd backslash users backslash alex backslash projects</td><td><kbd>cd \users\alex\projects</kbd></td></tr>
-        <tr><td>git double dash version</td><td><kbd>git --version</kbd></td></tr>
-        <tr><td>ls dash l</td><td><kbd>ls -l</kbd></td></tr>
         <tr><td>tilde slash projects slash koda</td><td><kbd>~/projects/koda</kbd></td></tr>
+        <tr><td>git double dash version</td><td><kbd>git --version</kbd></td></tr>
+        <tr><td>npm install double dash save dev</td><td><kbd>npm install --save dev</kbd></td></tr>
+        <tr><td>ls dash l</td><td><kbd>ls -l</kbd></td></tr>
+        <tr><td>dot dot slash src</td><td><kbd>../src</kbd></td></tr>
         <tr><td>cat file dot txt pipe grep error</td><td><kbd>cat file.txt | grep error</kbd></td></tr>
+        <tr><td>echo hello greater than output dot txt</td><td><kbd>echo hello &gt; output.txt</kbd></td></tr>
+        <tr><td>cd slash tmp and and ls</td><td><kbd>cd /tmp &amp;&amp; ls</kbd></td></tr>
       </table>
-      <div class="tip"><strong>Windows paths use backslash</strong> — say "backslash" for <code>\</code>. Unix paths (WSL, Git Bash) use "slash" for <code>/</code>.</div>
-      <div class="tip"><strong>Auto-capitalize is off in terminal mode</strong> — "cd /users" stays lowercase, not "Cd /users".</div>
 
-      <h3>Voice commands in a terminal</h3>
-      <p>Editing commands are automatically adapted for the terminal — Koda uses the right shortcuts for PowerShell / PSReadLine:</p>
+      <h3>Symbol reference</h3>
       <table class="mic-table">
         <tr>
           <th>Say</th>
-          <th>What happens in terminal</th>
+          <th>Gets</th>
         </tr>
-        <tr><td>undo</td><td>Clears the current input line (<kbd>Escape</kbd> = RevertLine) — PSReadLine doesn't undo synthetic pastes via Ctrl+Z</td></tr>
-        <tr><td>delete / delete that</td><td>Clears the current input line (<kbd>Escape</kbd> = RevertLine)</td></tr>
-        <tr><td>delete the word</td><td>Deletes word before cursor (<kbd>Ctrl+W</kbd>)</td></tr>
-        <tr><td>select all</td><td>Moves cursor to start of line (<kbd>Ctrl+A</kbd>)</td></tr>
-        <tr><td>new line</td><td>Enter — runs the command</td></tr>
+        <tr><td>slash / forward slash</td><td><code>/</code></td></tr>
+        <tr><td>backslash / back slash</td><td><code>\</code></td></tr>
+        <tr><td>tilde</td><td><code>~</code></td></tr>
+        <tr><td>double dash</td><td><code>--</code> (use "double dash" not "dash dash" — Whisper compresses "dash dash" semantically)</td></tr>
+        <tr><td>dash + letter (e.g. "dash v")</td><td><code>-v</code></td></tr>
+        <tr><td>pipe</td><td><code>|</code></td></tr>
+        <tr><td>greater than</td><td><code>&gt;</code></td></tr>
+        <tr><td>double greater than</td><td><code>&gt;&gt;</code></td></tr>
+        <tr><td>and and / double ampersand</td><td><code>&amp;&amp;</code></td></tr>
+        <tr><td>star / asterisk</td><td><code>*</code></td></tr>
+        <tr><td>dollar / dollar sign</td><td><code>$</code></td></tr>
+        <tr><td>dot + extension (e.g. "dot txt")</td><td><code>.txt</code></td></tr>
+        <tr><td>dot dot</td><td><code>..</code></td></tr>
+        <tr><td>dot slash</td><td><code>./</code></td></tr>
+        <tr><td>dot dot slash</td><td><code>../</code></td></tr>
       </table>
-      <p><strong>Tip:</strong> Append a command at the end of your dictation — Koda pastes the text first, then fires the command. Example: say <em>"hello world new line"</em> to paste <code>Hello world</code> and hit Enter.</p>
+      <div class="tip"><strong>Auto-capitalize is disabled in terminal mode</strong> — "cd /users" stays lowercase, not "Cd /users".</div>
+      <div class="warning"><strong>Windows paths use backslash</strong> — say "backslash" for <code>\</code>. Unix paths (WSL, Git Bash) use "slash" for <code>/</code>.</div>
 
-      <h2>Excel Voice Navigation</h2>
-      <p>In Excel or Google Sheets, hold <kbd>Ctrl + F9</kbd> and speak to navigate and manage your spreadsheet by voice:</p>
+      <h2>Transcribe Audio Files (Right-Click Menu)</h2>
+      <p>Koda can transcribe existing audio files — voice memos, meeting recordings, podcast clips, anything. Right-click the file in Windows Explorer → <strong>Transcribe with Koda</strong>. A small window opens, runs the transcription, and shows the text with a Copy button.</p>
+      <p>Supported formats: <code>.mp3</code>, <code>.wav</code>, <code>.m4a</code>, <code>.flac</code>, <code>.ogg</code>, <code>.webm</code>, <code>.wma</code>, <code>.aac</code>, <code>.opus</code>.</p>
+
+      <h3>First-time setup (one-time, ~10 seconds)</h3>
+      <p>The right-click menu entry has to be registered once per computer:</p>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Open a terminal (PowerShell or cmd) in the Koda folder</div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Run: <code>venv\Scripts\python.exe context_menu.py install</code></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">You should see <code>Registered context menu for: .wav, .mp3, .m4a, ...</code></div></div>
+      </div>
+      <p>That's it. The entry persists across reboots and Koda restarts.</p>
+
+      <h3>Windows 11 — "Show more options"</h3>
+      <p>Windows 11 hides most custom right-click entries under a secondary menu. If you right-click an audio file and don't see <strong>Transcribe with Koda</strong>:</p>
+      <ul>
+        <li>Click <strong>Show more options</strong> at the bottom of the right-click menu, <strong>or</strong></li>
+        <li>Hold <strong>Shift</strong> while right-clicking to skip straight to the full menu</li>
+      </ul>
+      <p>The entry will be in the expanded menu.</p>
+
+      <h3>Removing the entry</h3>
+      <p>If you want to remove it: <code>venv\Scripts\python.exe context_menu.py uninstall</code></p>
+
+      <h2>Undoing a Paste</h2>
+      <p>If Koda pastes something wrong, you have three options:</p>
       <table class="mic-table">
         <tr>
-          <th>What you say</th>
-          <th>What happens</th>
+          <th>How</th>
+          <th>What it does</th>
         </tr>
-        <tr><td>go to B5 / navigate to B5</td><td>Jumps to cell B5</td></tr>
-        <tr><td>select column C</td><td>Selects the entire column C</td></tr>
-        <tr><td>select row 5</td><td>Selects the entire row 5</td></tr>
-        <tr><td>go home / go to first cell</td><td>Jumps to A1</td></tr>
-        <tr><td>go to last row</td><td>Jumps to the last row with data</td></tr>
-        <tr><td>select all</td><td>Selects the entire used range</td></tr>
-        <tr><td>make a table / create a table</td><td>Formats your selection as an Excel Table with auto-filter</td></tr>
-        <tr><td>create a table with columns Name Date Amount</td><td>Writes those headers and creates a table</td></tr>
+        <tr><td>Press <kbd>F7</kbd></td><td>Undoes the last paste and starts a new recording so you can try again</td></tr>
+        <tr><td>Hold <kbd>Ctrl + Space</kbd>, say <strong>"undo"</strong></td><td>Sends Ctrl+Z — just undoes, no re-recording</td></tr>
+        <tr><td>Hold <kbd>Ctrl + Space</kbd>, say <strong>"delete that"</strong></td><td>Backspaces over the last paste</td></tr>
       </table>
+
+      <h2>Voice Editing Commands</h2>
+      <p>While holding <kbd>Ctrl + Space</kbd> (or <kbd>F8</kbd> for command mode), speak these commands to control your editor without typing:</p>
+      <table class="mic-table">
+        <tr>
+          <th>Say</th>
+          <th>Action</th>
+        </tr>
+        <tr><td>undo</td><td><kbd>Ctrl+Z</kbd></td></tr>
+        <tr><td>redo</td><td><kbd>Ctrl+Y</kbd></td></tr>
+        <tr><td>select all</td><td><kbd>Ctrl+A</kbd></td></tr>
+        <tr><td>copy</td><td><kbd>Ctrl+C</kbd></td></tr>
+        <tr><td>cut</td><td><kbd>Ctrl+X</kbd></td></tr>
+        <tr><td>paste</td><td><kbd>Ctrl+V</kbd></td></tr>
+        <tr><td>save</td><td><kbd>Ctrl+S</kbd></td></tr>
+        <tr><td>delete that</td><td>Backspace</td></tr>
+        <tr><td>delete the word</td><td><kbd>Ctrl+Backspace</kbd></td></tr>
+        <tr><td>new line</td><td>Enter</td></tr>
+        <tr><td>new paragraph</td><td>Enter + Enter</td></tr>
+        <tr><td>bold</td><td><kbd>Ctrl+B</kbd></td></tr>
+        <tr><td>italic</td><td><kbd>Ctrl+I</kbd></td></tr>
+        <tr><td>go to the end</td><td><kbd>Ctrl+End</kbd></td></tr>
+        <tr><td>go home</td><td><kbd>Ctrl+Home</kbd></td></tr>
+      </table>
+
+      <h3>In a terminal window</h3>
+      <p>Terminal shortcuts are different from text editor shortcuts — Koda automatically uses the right ones when a terminal is the active window:</p>
+      <table class="mic-table">
+        <tr>
+          <th>Say</th>
+          <th>Terminal action</th>
+          <th>Why it's different</th>
+        </tr>
+        <tr><td>undo</td><td>Clears the current input line</td><td>PSReadLine doesn't undo synthetic pastes via Ctrl+Z — <kbd>Escape</kbd> (RevertLine) clears what was just pasted</td></tr>
+        <tr><td>delete / delete that</td><td>Clears the current input line</td><td>Same as undo — Escape reverts the line</td></tr>
+        <tr><td>delete the word</td><td><kbd>Ctrl+W</kbd> — readline word delete</td><td>Ctrl+Backspace is less reliable in terminals</td></tr>
+        <tr><td>select all</td><td><kbd>Ctrl+A</kbd> — moves cursor to start of line</td><td>No reliable keystroke selects just the current input line with a visual highlight</td></tr>
+        <tr><td>new line</td><td>Enter (runs the command)</td><td>Same as GUI</td></tr>
+      </table>
+      <div class="tip"><strong>Suffix commands in terminal:</strong> You can append a command at the end of your dictation. Koda pastes your text first, then fires the command — so "hello world new line" pastes <code>Hello world</code> and then hits Enter.</div>
 
       <h2>Troubleshooting</h2>
 
       <div class="troubleshoot-item">
         <div class="problem">Koda isn't pasting anything</div>
-        <div class="solution">Click into the text field first, then press the hotkey. Check the tray icon is showing (not paused).</div>
+        <div class="solution">Click into the text field first, then press the hotkey. Check the tray icon is green (running), not paused.</div>
       </div>
 
       <div class="troubleshoot-item">
@@ -403,7 +627,7 @@
 
       <div class="troubleshoot-item">
         <div class="problem">Transcription is inaccurate</div>
-        <div class="solution">Try the Accurate model in Settings (slower but more precise). Reduce background noise. Speak closer to the mic.</div>
+        <div class="solution">Try the <strong>Accurate</strong> model in Settings (slower but more precise). Reduce background noise. Speak closer to the mic.</div>
       </div>
 
       <div class="troubleshoot-item">
@@ -414,10 +638,13 @@
       <h2>Uninstalling</h2>
       <p>Go to <strong>Windows Settings → Apps → Installed apps</strong>, find <strong>Koda</strong>, and click <strong>Uninstall</strong>.</p>
 
+      <h2>Need Help?</h2>
+      <p>Contact: <a href="mailto:alex@kodaspeak.com">alex@kodaspeak.com</a></p>
+
     </div>
 
     <div class="footer">
-      Koda v4.2.0 &nbsp;·&nbsp; <a href="mailto:alex@kodaspeak.com">alex@kodaspeak.com</a> &nbsp;·&nbsp; kodaspeak.com
+      Koda v4.3.0 &nbsp;·&nbsp; <a href="mailto:alex@kodaspeak.com">alex@kodaspeak.com</a> &nbsp;·&nbsp; kodaspeak.com
     </div>
 
   </div>

@@ -1,5 +1,5 @@
 # Koda User Guide
-**Version 4.2.0**
+**Version 4.3.0**
 
 ---
 
@@ -13,7 +13,7 @@ No clicking a mic button. No switching apps. Just talk.
 
 ## Installation
 
-1. Double-click **KodaSetup-4.2.0.exe**
+1. Double-click **KodaSetup-4.3.0.exe**
 2. If Windows shows a "protected your PC" warning, click **More info → Run anyway**
 3. Follow the installer wizard
 4. Koda launches automatically when installation completes
