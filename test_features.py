@@ -2365,5 +2365,54 @@ class TestLoadWhisperModelBundledFallback(unittest.TestCase):
                     self.voice.load_whisper_model()
 
 
+# ============================================================
+# start_recording — mic-unavailable UX (regression)
+# Reason: pre-4.3.1 behavior fired the start chime on hotkey press even when
+# no audio stream existed, misleading users with no mic into thinking Koda
+# was working. Now start_recording plays an error sound and bails early.
+# ============================================================
+
+
+class _FakeStream:
+    def __init__(self, active):
+        self.active = active
+
+
+class TestStartRecordingNoMic(unittest.TestCase):
+    def setUp(self):
+        import voice
+        self.voice = voice
+        self._saved_stream = getattr(voice, "stream", None)
+        self._saved_recording = voice.recording
+
+    def tearDown(self):
+        self.voice.stream = self._saved_stream
+        self.voice.recording = self._saved_recording
+
+    def test_error_sound_and_no_recording_when_stream_is_none(self):
+        self.voice.stream = None
+        self.voice.recording = False
+        with patch("voice.play_error_sound") as err, \
+             patch("voice.play_start_sound") as start, \
+             patch("voice.error_notify"), \
+             patch("voice.update_tray"):
+            self.voice.start_recording()
+        err.assert_called_once()
+        start.assert_not_called()
+        self.assertFalse(self.voice.recording)
+
+    def test_error_sound_and_no_recording_when_stream_inactive(self):
+        self.voice.stream = _FakeStream(active=False)
+        self.voice.recording = False
+        with patch("voice.play_error_sound") as err, \
+             patch("voice.play_start_sound") as start, \
+             patch("voice.error_notify"), \
+             patch("voice.update_tray"):
+            self.voice.start_recording()
+        err.assert_called_once()
+        start.assert_not_called()
+        self.assertFalse(self.voice.recording)
+
+
 if __name__ == "__main__":
     unittest.main()

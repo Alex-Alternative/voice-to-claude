@@ -64,7 +64,7 @@ logger = logging.getLogger("koda")
 logger.setLevel(logging.DEBUG)  # Koda's own logger is DEBUG, but library noise is WARNING+
 
 # --- Version ---
-VERSION = "4.3.0"
+VERSION = "4.3.1"
 
 # --- Globals ---
 recording = False
@@ -673,6 +673,13 @@ def _streaming_thread():
 def start_recording(mode="dictation", force_vad=False, vad_timeout_ms=None):
     global recording, audio_chunks, last_speech_time, recording_mode, streaming_text
     if recording:
+        return
+    if stream is None or not stream.active:
+        # Mic unavailable — give audible + visible feedback instead of a misleading
+        # start chime followed by silence. Watchdog keeps trying to recover in the
+        # background, so the user can retry in a few seconds once a mic is plugged in.
+        play_error_sound()
+        error_notify("No microphone available. Plug one in and try again in a few seconds — Koda will recover automatically.")
         return
     audio_chunks = []
     streaming_text = ""
@@ -1349,10 +1356,15 @@ def _watchdog_thread():
 
         try:
             # --- Fast path: stream health every 3s ---
-            if stream and not stream.active:
+            # Covers both startup failure (stream is None — mic unavailable at launch)
+            # and mid-session death (stream.active == False). A null stream at launch
+            # used to leave Koda permanently dead: the watchdog required `stream` to be
+            # truthy to even consider a restart. Now any state where the stream can't
+            # produce audio triggers the same recovery path.
+            if stream is None or not stream.active:
                 global _mic_disconnected
-                logger.warning("Audio stream died — restarting")
                 current_count = _count_input_devices()
+                count_changed = current_count != _input_device_count
                 if current_count < _input_device_count:
                     # Physical device removed — don't restart on wrong device
                     logger.warning("Input device count dropped %d→%d — physical disconnect",
@@ -1361,8 +1373,16 @@ def _watchdog_thread():
                         error_notify("Microphone disconnected. Plug it back in — Koda will recover.")
                         update_tray("#e74c3c", "Koda: Mic error")
                     _mic_disconnected = True
-                else:
-                    # Device count same or higher — safe to restart
+                    _input_device_count = current_count
+                elif not _mic_disconnected or count_changed:
+                    # Either the first time we've seen the stream dead (initial retry
+                    # after startup failure) or the device count changed upward (mic
+                    # plugged in after launch). Avoid hammering _restart_audio_stream
+                    # every 3s once we've settled into the "no mic" steady state.
+                    if stream is None:
+                        logger.info("Audio stream not open — attempting to start (devices=%d)", current_count)
+                    else:
+                        logger.warning("Audio stream died — restarting")
                     ok = False
                     try:
                         ok = _restart_audio_stream()
@@ -1375,9 +1395,10 @@ def _watchdog_thread():
                         update_tray("#2ecc71", "Koda: Ready")
                     else:
                         if not _mic_disconnected:
-                            error_notify("Microphone disconnected. Check your mic and restart Koda.")
+                            error_notify("Microphone unavailable. Plug one in and set it as your default input — Koda will recover automatically.")
                             update_tray("#e74c3c", "Koda: Mic error")
                         _mic_disconnected = True
+                    _input_device_count = current_count
 
             # --- Slow path: every ~15s ---
             elapsed_15 = now - last_15s_time
