@@ -129,12 +129,36 @@ var
   ModelPage:     TInputOptionWizardPage;
   FormulaPage:   TInputOptionWizardPage;
 
+{ Win32 API — count audio input devices (recording devices) without }
+{ needing PortAudio or any helper exe. Returns 0 when no mic is set up. }
+function waveInGetNumDevs: Cardinal;
+  external 'waveInGetNumDevs@winmm.dll stdcall';
+
 procedure InitializeWizard();
 var
   MicMsg: String;
+  DeviceCount: Cardinal;
 begin
   { PAGE 1 — Microphone guidance }
-  MicMsg :=
+  DeviceCount := waveInGetNumDevs();
+
+  MicMsg := '';
+  if DeviceCount = 0 then
+    MicMsg :=
+      '*** NO MICROPHONE DETECTED ***' + #13#10 + #13#10 +
+      'Windows is not reporting any recording devices on this PC.' + #13#10 +
+      'Koda needs a microphone to work.' + #13#10 + #13#10 +
+      'Before Koda can transcribe:' + #13#10 +
+      '  1. Plug in a microphone, headset, or webcam with a mic' + #13#10 +
+      '  2. Right-click the speaker icon in the taskbar' + #13#10 +
+      '     -> Sound settings -> Input -> pick your mic as the default' + #13#10 +
+      '  3. Confirm the input level bar moves when you speak' + #13#10 + #13#10 +
+      'Installation will continue, but Koda will sit idle with a' + #13#10 +
+      '"Mic error" tray icon until a microphone is set up.' + #13#10 +
+      'Once you plug one in, Koda recovers automatically (no restart).' + #13#10 + #13#10 +
+      '--- General microphone guidance ---' + #13#10 + #13#10;
+
+  MicMsg := MicMsg +
     'Koda will use your Windows default microphone.' + #13#10 +
     'You can change this in Settings after installation.' + #13#10 + #13#10 +
     'What to expect with different microphones:' + #13#10 + #13#10 +
