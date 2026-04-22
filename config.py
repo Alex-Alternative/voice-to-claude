@@ -26,6 +26,16 @@ CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 DEFAULT_CONFIG = {
     "model_size": "small",
     "compute_type": "int8",
+    # Windows process priority class for the Koda tray process. Higher values let
+    # Windows preempt other normal-priority processes (e.g. many Node/Electron
+    # sessions) so transcription stays responsive under system load. Values:
+    # "normal" | "above_normal" | "high". "above_normal" is the polite default.
+    "process_priority": "above_normal",
+    # Number of CPU threads faster-whisper/CTranslate2 uses for inference. 0 =
+    # all cores (OpenMP default), which contends badly when many other heavy
+    # processes are running. 4 is a deliberate under-allocation that plays nice
+    # with a busy system; raise on an otherwise-idle box if you want peak speed.
+    "cpu_threads": 4,
     "language": "en",
     "output_mode": "auto_paste",
     "hotkey_dictation": "ctrl+space",

@@ -11,7 +11,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from text_processing import (
     process_text,
@@ -2335,7 +2335,7 @@ class TestLoadWhisperModelBundledFallback(unittest.TestCase):
 
             fake_model = object()
 
-            def fake_whisper_ctor(arg, device=None, compute_type=None):
+            def fake_whisper_ctor(arg, device=None, compute_type=None, cpu_threads=None):
                 if isinstance(arg, str) and arg.replace("\\", "/").endswith("/_model_small"):
                     return fake_model
                 raise RuntimeError(f"cannot load: {arg!r}")
@@ -2355,7 +2355,7 @@ class TestLoadWhisperModelBundledFallback(unittest.TestCase):
             self.voice.config["model_size"] = "base"
             self.voice.config["compute_type"] = "int8"
 
-            def always_fail(arg, device=None, compute_type=None):
+            def always_fail(arg, device=None, compute_type=None, cpu_threads=None):
                 raise RuntimeError("no model available")
 
             with patch("faster_whisper.WhisperModel", side_effect=always_fail), \
@@ -2412,6 +2412,106 @@ class TestStartRecordingNoMic(unittest.TestCase):
         err.assert_called_once()
         start.assert_not_called()
         self.assertFalse(self.voice.recording)
+
+
+# ============================================================
+# Process priority — Windows SetPriorityClass wiring
+# Reason: under heavy system load (many Node/Electron sessions) Whisper
+# inference stalls because Koda competes with every other normal-priority
+# process for CPU. Raising priority keeps the tray responsive without a
+# dependency on psutil.
+# ============================================================
+
+
+class TestSetProcessPriority(unittest.TestCase):
+    def setUp(self):
+        import voice
+        self.voice = voice
+
+    def test_known_level_calls_setpriorityclass_with_correct_flag(self):
+        if not hasattr(self.voice.ctypes, "windll"):
+            self.skipTest("ctypes.windll only present on Windows")
+        fake_kernel = MagicMock()
+        fake_kernel.GetCurrentProcess.return_value = 0xABCD
+        fake_kernel.SetPriorityClass.return_value = 1  # success
+        with patch.object(self.voice.ctypes, "windll") as windll:
+            windll.kernel32 = fake_kernel
+            self.voice.set_process_priority("above_normal")
+        fake_kernel.SetPriorityClass.assert_called_once_with(0xABCD, 0x00008000)
+
+    def test_high_priority_maps_to_high_priority_class(self):
+        if not hasattr(self.voice.ctypes, "windll"):
+            self.skipTest("ctypes.windll only present on Windows")
+        fake_kernel = MagicMock()
+        fake_kernel.GetCurrentProcess.return_value = 0x1
+        fake_kernel.SetPriorityClass.return_value = 1
+        with patch.object(self.voice.ctypes, "windll") as windll:
+            windll.kernel32 = fake_kernel
+            self.voice.set_process_priority("high")
+        fake_kernel.SetPriorityClass.assert_called_once_with(0x1, 0x00000080)
+
+    def test_unknown_level_is_no_op_and_logs(self):
+        fake_kernel = MagicMock()
+        with patch.object(self.voice.ctypes, "windll") as windll:
+            windll.kernel32 = fake_kernel
+            self.voice.set_process_priority("turbo")
+        fake_kernel.SetPriorityClass.assert_not_called()
+
+    def test_non_win32_is_no_op(self):
+        with patch.object(self.voice.sys, "platform", "linux"), \
+             patch.object(self.voice.ctypes, "windll", create=True) as windll:
+            self.voice.set_process_priority("above_normal")
+        windll.kernel32.SetPriorityClass.assert_not_called()
+
+
+# ============================================================
+# cpu_threads is forwarded to WhisperModel
+# Reason: under CPU contention, pinning the OpenMP thread pool prevents
+# cache thrash. This test pins the config value and verifies it reaches
+# the ctor — catches a silent regression if the kwarg is ever dropped.
+# ============================================================
+
+
+class TestCpuThreadsForwarded(unittest.TestCase):
+    def setUp(self):
+        import sys as _sys
+        import voice
+        self.voice = voice
+        self.sys = _sys
+        self._saved_config = dict(voice.config)
+        self._saved_model = getattr(voice, "model", None)
+        self._saved_meipass = getattr(_sys, "_MEIPASS", None)
+
+    def tearDown(self):
+        self.voice.config.clear()
+        self.voice.config.update(self._saved_config)
+        self.voice.model = self._saved_model
+        if self._saved_meipass is None:
+            if hasattr(self.sys, "_MEIPASS"):
+                del self.sys._MEIPASS
+        else:
+            self.sys._MEIPASS = self._saved_meipass
+
+    def test_config_cpu_threads_reaches_whisper_ctor(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "_model_small"))
+            self.sys._MEIPASS = d
+            self.voice.config["model_size"] = "small"
+            self.voice.config["compute_type"] = "int8"
+            self.voice.config["cpu_threads"] = 6
+
+            captured = {}
+
+            def fake_ctor(arg, device=None, compute_type=None, cpu_threads=None):
+                captured["cpu_threads"] = cpu_threads
+                return object()
+
+            with patch("faster_whisper.WhisperModel", side_effect=fake_ctor), \
+                 patch("voice.error_notify"), \
+                 patch("voice.save_config"):
+                self.voice.load_whisper_model()
+
+            self.assertEqual(captured["cpu_threads"], 6)
 
 
 # ============================================================

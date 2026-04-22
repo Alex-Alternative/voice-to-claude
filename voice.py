@@ -37,6 +37,45 @@ if sys.platform == "win32":
     except Exception:
         pass
 
+
+# Windows SetPriorityClass constants — keep in a single source of truth.
+_PRIORITY_CLASSES = {
+    "normal": 0x00000020,         # NORMAL_PRIORITY_CLASS
+    "above_normal": 0x00008000,   # ABOVE_NORMAL_PRIORITY_CLASS
+    "high": 0x00000080,           # HIGH_PRIORITY_CLASS
+}
+
+
+def set_process_priority(level):
+    """Raise the current process's Windows scheduling priority class.
+
+    Under system load (many Node/Electron sessions, background builds, etc.)
+    the default NORMAL_PRIORITY_CLASS causes Koda to round-robin with every
+    other CPU-hungry process — Whisper transcription stalls for tens of
+    seconds. ABOVE_NORMAL lets Windows preempt other normal-priority processes
+    when Koda has work without starving the rest of the desktop. HIGH is more
+    aggressive; never use REALTIME.
+
+    No-op on non-Windows platforms. Unknown levels log a warning and fall
+    through to NORMAL so the app still starts cleanly.
+    """
+    if sys.platform != "win32":
+        return
+    flag = _PRIORITY_CLASSES.get(level)
+    if flag is None:
+        logger.warning("Unknown process_priority %r — leaving at normal", level)
+        return
+    try:
+        handle = ctypes.windll.kernel32.GetCurrentProcess()
+        ok = ctypes.windll.kernel32.SetPriorityClass(handle, flag)
+        if not ok:
+            err = ctypes.windll.kernel32.GetLastError()
+            logger.warning("SetPriorityClass(%s) failed (GetLastError=%d)", level, err)
+        else:
+            logger.info("Process priority set to %s", level)
+    except Exception as e:
+        logger.warning("Could not set process priority: %s", e)
+
 from config import CONFIG_DIR, load_config, save_config
 from text_processing import process_text, apply_custom_vocabulary
 from history import init_db, save_transcription
@@ -335,13 +374,18 @@ def load_whisper_model():
     logger.debug("Model search: base_dir=%s, bundled_path=%s, exists=%s, bundled_sizes=%s",
                  base_dir, bundled, os.path.isdir(bundled), bundled_sizes)
 
+    # Cap faster-whisper/CTranslate2 thread pool. Default (0 = all cores) thrashes
+    # the scheduler under system load — pinning to a small number lets each thread
+    # keep its L3 cache and plays nice with other heavy processes.
+    cpu_threads = int(config.get("cpu_threads", 4))
+
     def _load(m_size, dev, c_type):
         b = os.path.join(base_dir, f"_model_{m_size}")
         if os.path.isdir(b):
             logger.debug("Loading bundled model from: %s", b)
-            return WhisperModel(b, device=dev, compute_type=c_type)
+            return WhisperModel(b, device=dev, compute_type=c_type, cpu_threads=cpu_threads)
         logger.debug("Bundled model not found at %s — loading by name (may download)", b)
-        return WhisperModel(m_size, device=dev, compute_type=c_type)
+        return WhisperModel(m_size, device=dev, compute_type=c_type, cpu_threads=cpu_threads)
 
     def _try_bundled_fallback(original_error):
         global model
@@ -739,19 +783,27 @@ def _load_custom_words():
         return {}
 
 
+_SLOW_TRANSCRIPTION_WARN_SECS = 12.0
+
+
 def _transcribe_and_paste():
     global last_transcription
+    stage_start = time.perf_counter()
+    timings = {}
     try:
         rec_start = time.time()
         audio = np.concatenate(audio_chunks, axis=0).flatten()
+        timings["concat"] = time.perf_counter() - stage_start
 
         # Noise reduction
         if config.get("noise_reduction", False):
+            nr_start = time.perf_counter()
             try:
                 import noisereduce as nr
                 audio = nr.reduce_noise(y=audio, sr=16000, stationary=True)
             except Exception as e:
                 logger.warning("Noise reduction failed: %s", e)
+            timings["noise_reduction"] = time.perf_counter() - nr_start
 
         # Build transcription kwargs
         translation_cfg = config.get("translation", {})
@@ -783,8 +835,10 @@ def _transcribe_and_paste():
             transcribe_kwargs["initial_prompt"] = prompt_words
 
         # Transcribe with VAD filter + repetition penalty to prevent hallucinated repeats
+        whisper_start = time.perf_counter()
         segments, info = model.transcribe(audio, **transcribe_kwargs)
         text = dedup_segments(segments)
+        timings["whisper"] = time.perf_counter() - whisper_start
         logger.debug("Whisper raw: %r", text)
 
         if not text:
@@ -943,6 +997,19 @@ def _transcribe_and_paste():
         error_notify("Transcription failed. Check debug.log for details.")
         play_error_sound()
     finally:
+        total = time.perf_counter() - stage_start
+        # Whisper stage dominating = CPU contention → tune process_priority / cpu_threads.
+        logger.debug("Transcribe timings (s): total=%.2f %s",
+                     total,
+                     " ".join(f"{k}={v:.2f}" for k, v in timings.items()))
+        if total > _SLOW_TRANSCRIPTION_WARN_SECS:
+            logger.warning(
+                "Slow transcription: %.1fs (stages: %s). "
+                "Likely CPU-starved by other heavy processes — consider closing some, "
+                "raising process_priority, or tuning cpu_threads in config.json.",
+                total,
+                ", ".join(f"{k}={v:.1f}s" for k, v in timings.items()),
+            )
         update_tray("#2ecc71", "Koda: Ready")
 
 
@@ -2005,6 +2072,10 @@ def main():
 
     config = load_config()
     config["custom_vocabulary"] = _load_custom_words()
+
+    # Raise scheduling priority before any CPU-heavy work (model load, inference).
+    # Keeps Koda responsive when the user also has many Node/Electron sessions open.
+    set_process_priority(config.get("process_priority", "above_normal"))
 
     tray_icon = pystray.Icon(
         "koda",
