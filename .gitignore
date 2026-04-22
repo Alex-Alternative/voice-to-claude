@@ -13,7 +13,8 @@ debug.log
 _model_*/
 .koda_initialized
 koda_stats.db
-.claude/
+.claude/*
+!.claude/next.md
 .forge-clean/
 .forge-test/
 .deslop/
