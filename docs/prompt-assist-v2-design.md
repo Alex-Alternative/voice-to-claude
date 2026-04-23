@@ -203,7 +203,7 @@ One feature branch: `feat/prompt-assist-v2`.
 
 - [ ] `prompt_conversation.py` — state machine, 3 slots + confirmation, platform detection, early-exit phrases, cancel paths, LLM-backend router
 - [ ] `voice.py` — conditional branch at `prompt_press`, TTS warm-start on init
-- [ ] `config.py` — `"prompt_assist": {"conversational": True, "refine_backend": "none", "api_provider": null, "opener": "what are we building with AI today?"}`
+- [ ] `config.py` — `"prompt_assist": {"conversational": True, "refine_backend": "none", "api_provider": null, "opener": "what are we working on with AI today?"}`
 - [ ] `configure.py` — voice picker + LLM refinement picker + API key capture flow with Credential Manager
 - [ ] `overlay.py` — `show_prompt_preview()` larger-text mode with callback handles
 - [ ] `settings_gui.py` — voice + LLM-backend dropdowns for post-install swap
@@ -255,7 +255,7 @@ One feature branch: `feat/prompt-assist-v2`.
 ## Next steps
 
 1. Alex reads this doc.
-2. Approve opener text ("what are we building with AI today?") and exit phrases (go / done / cancel / send / refine / add / explain) — or propose tweaks.
+2. Approve opener text ("what are we working on with AI today?") and exit phrases (go / done / cancel / send / refine / add / explain) — or propose tweaks.
 3. Confirm MVP scope is right.
 4. Build on `feat/prompt-assist-v2`, runtime-test each branch of the state machine, PR.
 
