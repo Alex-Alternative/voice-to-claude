@@ -28,12 +28,11 @@ See memory file for session-by-session state: `C:\Users\alexi\.claude\projects\C
 
 Before opening a pull request or pushing any code change to GitHub:
 
-1. Run `/forge-deslop` on the diff. Approve the hygiene fixes it proposes.
-2. Run `/forge-review` on the diff. Resolve any BLOCKING or NEEDS-FIX findings.
-3. Only then push.
+1. Verify Skill Forge is current: `bash ~/Projects/skillforge/scripts/check-updates.sh`. Exit 0 = proceed. Non-zero = resolve before continuing (install it, pull, or clean your local tree — the script tells you which). If the script is missing, Skill Forge isn't installed — install it first per `~/Projects/afg-hq/CLAUDE.md`.
+2. Run `/forge-deslop` on the diff. Approve the hygiene fixes it proposes.
+3. Run `/forge-review` on the diff. Resolve any BLOCKING or NEEDS-FIX findings.
+4. Only then push.
 
 **Scope:** applies to pushes that touch code (source files, migrations, config, package manifests). Docs-only, README-only, brand-file-only, or `.claude/next.md`-only pushes are exempt.
 
-**Order matters:** deslop first (may modify code), then review (validates the cleaned result). Reversing the order invalidates the review.
-
-**Requires Skill Forge installed.** See `~/Projects/afg-hq/CLAUDE.md` for install instructions.
+**Order matters:** check first (stale skill = false green), deslop second (may modify code), review third (validates the cleaned result). Reversing the order invalidates the review.
