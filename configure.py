@@ -306,6 +306,22 @@ FKEY_OPTIONS = [
     ("F9", "f9"), ("F10", "f10"), ("F11", "f11"), ("F12", "f12"),
 ]
 
+# Prompt Assist gets its own list: Ctrl+F* variants are offered first because
+# bare F9 collides with Alienware Command Center / other OEM performance-mode
+# toggles on many laptops (see commit a55a0e7). Bare F-keys remain available
+# for users on non-conflicting hardware.
+PROMPT_FKEY_OPTIONS = [
+    ("Ctrl + F9", "ctrl+f9"),
+    ("Ctrl + F8", "ctrl+f8"),
+    ("Ctrl + F10", "ctrl+f10"),
+    ("Ctrl + F11", "ctrl+f11"),
+    ("Ctrl + F12", "ctrl+f12"),
+    ("F9", "f9"),
+    ("F10", "f10"),
+    ("F11", "f11"),
+    ("F12", "f12"),
+]
+
 DICTATION_OPTIONS = [
     ("Ctrl + Space", "ctrl+space"),
     ("F8", "f8"),
@@ -335,6 +351,9 @@ def setup_hotkeys():
     print("                   can hear what was typed")
     print("    Read Selected- Highlight any text on screen and have Koda")
     print("                   read it to you\n")
+    print("  NOTE: Prompt Assist defaults to Ctrl+F9 because bare F9 collides")
+    print("        with Alienware Command Center and other OEM performance")
+    print("        toggles on many laptops.\n")
 
     # --- Dictation (main) ---
     print("  ── Dictation hotkey (your main key, used most often) ──\n")
@@ -347,16 +366,16 @@ def setup_hotkeys():
 
     # --- Customize the rest? ---
     print("  ── Other hotkeys (defaults shown) ──\n")
-    print("    F8  = Command      - Hold to talk, pastes cleaned-up text")
-    print("    F9  = Prompt Assist - Hold to talk, pastes a structured AI prompt")
-    print("    F7  = Correction   - Undo last paste and re-record")
-    print("    F6  = Read Back    - Reads last transcription aloud")
-    print("    F5  = Read Selected - Reads highlighted text aloud\n")
+    print("    F8      = Command         - Hold to talk, pastes cleaned-up text")
+    print("    Ctrl+F9 = Prompt Assist   - Hold to talk, pastes a structured AI prompt")
+    print("    F7      = Correction      - Undo last paste and re-record")
+    print("    F6      = Read Back       - Reads last transcription aloud")
+    print("    F5      = Read Selected   - Reads highlighted text aloud\n")
 
     customize = ask_yes_no("Customize these? (or keep defaults)", default=False)
 
     command = "f8"
-    prompt = "f9"
+    prompt = "ctrl+f9"
     correction = "f7"
     readback = "f6"
     readback_sel = "f5"
@@ -373,7 +392,7 @@ def setup_hotkeys():
         print("  ── Prompt Assist ──")
         print("  Hold to talk. Turns your speech into a well-structured prompt")
         print("  for ChatGPT, Claude, or any AI assistant.\n")
-        prompt = ask_choice("Prompt Assist hotkey:", FKEY_OPTIONS, default=4)  # F9
+        prompt = ask_choice("Prompt Assist hotkey:", PROMPT_FKEY_OPTIONS, default=0)  # Ctrl+F9
         print()
 
         print("  ── Correction ──")
