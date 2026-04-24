@@ -707,9 +707,32 @@ def slot_record(slot_name, config_dict, max_seconds=15.0, silence_seconds=None, 
     early and returns "" — used by the voice-confirm listener to stop promptly
     when a button press has already committed a decision.
     """
-    global _slot_recording, _slot_chunks
+    global _slot_recording, _slot_chunks, model, stream
     if silence_seconds is None:
         silence_seconds = config_dict.get("vad", {}).get("silence_timeout_ms", 1500) / 1000.0
+
+    # Cross-module bridge: when voice.py runs as __main__ (via start.bat or
+    # PyInstaller onefile) but another module imports us via `from voice
+    # import ...`, the importing side gets a separate `voice` module with
+    # its own globals. audio_callback is registered by __main__ and writes
+    # to __main__'s `_slot_recording` / `_slot_chunks` / `recording` /
+    # `audio_chunks` / `model` / `stream`. We route state through __main__
+    # when that's the case so audio buffers actually reach this function.
+    import sys
+    _my_name = __name__
+    _main = sys.modules.get("__main__")
+    bridge = _main if (_main is not None and _main is not sys.modules.get(_my_name)) else None
+
+    # Reach across for the loaded Whisper model + audio stream if our view is empty.
+    if bridge is not None:
+        if model is None:
+            cand = getattr(bridge, "model", None)
+            if cand is not None:
+                model = cand
+        if stream is None:
+            cand = getattr(bridge, "stream", None)
+            if cand is not None:
+                stream = cand
 
     if model is None:
         logger.warning("slot_record: whisper model not loaded; returning empty")
@@ -718,14 +741,34 @@ def slot_record(slot_name, config_dict, max_seconds=15.0, silence_seconds=None, 
         logger.warning("slot_record: audio stream not available; returning empty")
         return ""
 
-    _slot_chunks = []
-    _slot_recording = True
+    # Point _slot_recording / _slot_chunks at the module that audio_callback
+    # actually writes to. If bridging, we flip the __main__ flags and read
+    # chunks from __main__'s list; our own module's copies stay in sync for
+    # any local readers.
+    def _set_recording(flag):
+        global _slot_recording
+        _slot_recording = flag
+        if bridge is not None:
+            bridge._slot_recording = flag
+
+    def _get_chunks():
+        return bridge._slot_chunks if bridge is not None else _slot_chunks
+
+    def _reset_chunks():
+        global _slot_chunks
+        _slot_chunks = []
+        if bridge is not None:
+            bridge._slot_chunks = []
+
+    _reset_chunks()
+    _set_recording(True)
     play_start_sound()  # audio cue per design §"Design principles"
 
     cancelled = False
     try:
         start = time.time()
         last_voice = time.time()
+        voice_detected = False  # gate silence-stop until at least one voice event
         VAD_RMS_THRESHOLD = 0.005  # tuned for typical mic gain
         MIN_AUDIO_S = 0.5
 
@@ -735,25 +778,30 @@ def slot_record(slot_name, config_dict, max_seconds=15.0, silence_seconds=None, 
                 cancelled = True
                 break
             if time.time() - start > max_seconds:
-                logger.info("slot_record(%s): hit max_seconds=%s", slot_name, max_seconds)
+                logger.info("slot_record(%s): hit max_seconds=%s (voice_detected=%s, chunk_count=%d)",
+                            slot_name, max_seconds, voice_detected, len(_get_chunks()))
                 break
             time.sleep(0.08)
-            if _slot_chunks:
-                recent = _slot_chunks[-6:] if len(_slot_chunks) >= 6 else _slot_chunks
+            current_chunks = _get_chunks()
+            if current_chunks:
+                recent = current_chunks[-6:] if len(current_chunks) >= 6 else current_chunks
                 try:
                     arr = np.concatenate(recent, axis=0).flatten()
                     rms = float(np.sqrt(np.mean(arr * arr)))
                     if rms > VAD_RMS_THRESHOLD:
+                        voice_detected = True
                         last_voice = time.time()
                 except Exception:
                     pass
-            if (time.time() - last_voice) >= silence_seconds and (time.time() - start) >= MIN_AUDIO_S:
+            # Silence-stop requires BOTH: user actually spoke at some point AND
+            # silence_seconds have passed since their last voice event.
+            if voice_detected and (time.time() - last_voice) >= silence_seconds and (time.time() - start) >= MIN_AUDIO_S:
                 logger.info("slot_record(%s): VAD silence stop", slot_name)
                 break
     finally:
-        _slot_recording = False
-        chunks = _slot_chunks
-        _slot_chunks = []
+        _set_recording(False)
+        chunks = list(_get_chunks())  # snapshot before clearing
+        _reset_chunks()
 
     if cancelled:
         return ""

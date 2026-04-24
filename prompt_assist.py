@@ -174,10 +174,12 @@ def _extract_details(text):
     if techs:
         details["technologies"] = techs
 
-    # URLs and domains
-    urls = re.findall(r"https?://\S+|www\.\S+|\b\w+\.(com|org|io|dev|net|app)\b", text)
+    # URLs and domains — non-capturing groups so findall returns full matches,
+    # not just the TLD fragment (fixes the "URLs: com" bug where 'example.com'
+    # would return just 'com' because only the TLD was captured).
+    urls = re.findall(r"https?://\S+|www\.\S+|\b\w+\.(?:com|org|io|dev|net|app)\b", text)
     if urls:
-        details["urls"] = [u if isinstance(u, str) else u[0] for u in urls]
+        details["urls"] = list(set(urls))
 
     # File types and paths
     files = re.findall(r"\b[\w/\\]+\.(?:py|js|ts|tsx|jsx|json|csv|sql|html|css|md|yaml|yml|env|txt)\b", text)
@@ -218,8 +220,6 @@ def _template_code(cleaned, language, context):
     parts = [cleaned]
     if language:
         parts.append(f"\nLanguage: {language}")
-    if context:
-        parts.append(f"\nContext:\n{context}")
     parts.append(
         "\nRequirements:\n"
         "- Write complete, working code\n"
@@ -234,8 +234,6 @@ def _template_debug(cleaned, language, context):
     parts = [f"I need help debugging an issue.\n\nProblem: {cleaned}"]
     if language:
         parts.append(f"\nLanguage/stack: {language}")
-    if context:
-        parts.append(f"\nContext:\n{context}")
     parts.append(
         "\nPlease:\n"
         "1. Identify the likely root cause\n"
@@ -249,8 +247,6 @@ def _template_debug(cleaned, language, context):
 def _template_explain(cleaned, language, context):
     """Structure an explanation request."""
     parts = [cleaned]
-    if context:
-        parts.append(f"\nContext:\n{context}")
     parts.append(
         "\nPlease explain:\n"
         "- What it is and why it matters\n"
@@ -266,8 +262,6 @@ def _template_review(cleaned, language, context):
     parts = [cleaned]
     if language:
         parts.append(f"\nLanguage: {language}")
-    if context:
-        parts.append(f"\nContext:\n{context}")
     parts.append(
         "\nReview for:\n"
         "- Bugs or logic errors\n"
@@ -282,8 +276,6 @@ def _template_review(cleaned, language, context):
 def _template_write(cleaned, language, context):
     """Structure a writing/drafting request."""
     parts = [cleaned]
-    if context:
-        parts.append(f"\nContext:\n{context}")
     parts.append(
         "\nGuidelines:\n"
         "- Match the appropriate tone and formality\n"
@@ -294,15 +286,11 @@ def _template_write(cleaned, language, context):
 
 
 def _template_general(cleaned, language, context):
-    """Structure a general request with good prompt practices."""
-    parts = [cleaned]
-    if context:
-        parts.append(f"\nContext:\n{context}")
-    parts.append(
-        "\nPlease be specific and thorough in your response. "
-        "If you need clarification on anything, ask before proceeding."
-    )
-    return "\n".join(parts)
+    """General intent — return user's own words. Modern frontier models
+    (Claude 4, GPT-5) don't need a generic 'please be thorough' closer;
+    it adds noise without quality lift. If the user wanted structure,
+    they'd say so."""
+    return cleaned
 
 
 _TEMPLATES = {

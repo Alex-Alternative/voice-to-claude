@@ -47,9 +47,12 @@ CONFIRM_EXPLAIN_PHRASES = {"explain", "read it back", "read back", "read"}
 
 # Default opener — overrideable via config['prompt_assist']['opener']
 DEFAULT_OPENER = "What are we working on with AI today?"
+# Format slot deliberately dropped (2026-04-24) — "What should the answer look
+# like?" confused non-technical users who don't think about output shape.
+# Modern frontier models (Claude 4, GPT-5) handle formatting without being
+# told. User can still add format specifics via the overlay Add button.
 SLOT_QUESTIONS = {
     "context": "What does it need to know that it doesn't already?",
-    "format": "What should the answer look like?",
 }
 
 # Conservative no-auto-send timeout per design §state machine
@@ -146,14 +149,48 @@ def _summarize_for_speech(prompt: str) -> str:
 # ============================================================
 
 def _default_tts_speak(text: str) -> None:
+    """Speak text via direct SAPI5 COM (comtypes), bypassing pyttsx3.
+
+    pyttsx3's runAndWait() uses an internal event loop that gets stuck in
+    a 'run loop already started' state when called across daemon threads
+    (which is exactly what run_conversation does). Direct SAPI.SpVoice.Speak
+    is synchronous and thread-affinity-safe: each call creates a COM object
+    on the calling thread, speaks, and returns. No shared loop state.
+
+    Honors config['tts']['rate'] and config['tts']['voice'] (matches voice
+    name by case-insensitive substring, same as voice._get_tts).
+    """
+    if not text:
+        return
     try:
-        from voice import _get_tts
-        engine = _get_tts()
-        if not engine:
-            logger.warning("TTS unavailable; cannot speak: %r", text[:80])
-            return
-        engine.say(text)
-        engine.runAndWait()
+        import comtypes.client
+        import pythoncom
+        # CoInitialize for this thread — required for SAPI COM access.
+        # Safe to call multiple times; pythoncom refcounts.
+        try:
+            pythoncom.CoInitialize()
+        except Exception:
+            pass
+        sapi = comtypes.client.CreateObject("SAPI.SpVoice")
+        # Pull rate + voice from Koda's config (same shape _get_tts uses)
+        try:
+            from voice import config as _koda_config
+            speed = _koda_config.get("tts", {}).get("rate", "normal")
+            # SAPI rate is an int -10 to 10; map normal=0, fast=4, slow=-4
+            rate_map = {"slow": -4, "normal": 0, "fast": 4}
+            sapi.Rate = rate_map.get(speed, 0) if isinstance(speed, str) else 0
+            voice_name = (_koda_config.get("tts", {}).get("voice", "") or "").lower()
+            if voice_name:
+                tokens = sapi.GetVoices()
+                for i in range(tokens.Count):
+                    tok = tokens.Item(i)
+                    if voice_name in tok.GetDescription().lower():
+                        sapi.Voice = tok
+                        break
+        except Exception:
+            pass  # best-effort; fall through to defaults
+        # Speak synchronously (SVSFDefault = 0, blocks until done).
+        sapi.Speak(text, 0)
     except Exception as e:
         logger.error("Default TTS speak failed: %s", e, exc_info=True)
 
@@ -272,15 +309,6 @@ def run_conversation(
         if kind == "content":
             slots["context"] = payload
         # 'exit' here just means: done with context, advance.
-
-        snapshot["final_state"] = S_LISTENING_FORMAT
-        speak(SLOT_QUESTIONS["format"])
-        answer = record("format", config)
-        kind, payload = classify_slot_response(answer)
-        if kind == "cancel":
-            return _cancel("user said cancel at format slot")
-        if kind == "content":
-            slots["format"] = payload
 
     snapshot["final_state"] = S_ASSEMBLING
     raw = _combine_slots(slots["task"], slots["context"], slots["format"])

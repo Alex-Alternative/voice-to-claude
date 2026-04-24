@@ -2779,11 +2779,10 @@ class TestPromptConvStateMachine(unittest.TestCase):
                 cb(payload) if key == "on_add" else cb()
         return preview
 
-    def test_happy_path_3_slots_then_send(self):
+    def test_happy_path_2_slots_then_send(self):
         record = self._make_record({
             "task": "write a Python function that reverses a string",
             "context": "for a coding interview",
-            "format": "one short example",
         })
         snap = self.pc.run_conversation(
             {}, tts_speak=self._speak, record_slot=record,
@@ -2793,8 +2792,9 @@ class TestPromptConvStateMachine(unittest.TestCase):
         self.assertFalse(snap["cancelled"])
         self.assertEqual(len(self.pasted), 1)
         self.assertIn("reverses a string", self.pasted[0])
-        # Spoke opener + 2 slot questions + 1 confirm summary = 4
-        self.assertEqual(len(self.spoken), 4)
+        # Spoke opener + 1 slot question (context) + 1 confirm summary = 3
+        # Format slot dropped 2026-04-24 — confused non-technical users.
+        self.assertEqual(len(self.spoken), 3)
 
     def test_cancel_at_task_slot(self):
         record = self._make_record({"task": "cancel"})
