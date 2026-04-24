@@ -376,8 +376,13 @@ def refine_prompt(raw_speech, config):
     structured = template_fn(cleaned, language, context)
 
     # Step 4: Optional LLM refinement
+    # refine_backend is the user's install-time default (set via configure.py
+    # step 10 — "none" / "ollama" / "api"). llm_refine is a per-call override
+    # (e.g. prompt_conversation flips it True when the user clicks the Refine
+    # button to force polish even if their default backend is "none").
     pa_config = config.get("prompt_assist", {})
-    if pa_config.get("llm_refine", False):
+    backend = pa_config.get("refine_backend", "none")
+    if backend in ("ollama", "api") or pa_config.get("llm_refine", False):
         structured = _llm_refine(structured, config)
 
     logger.debug("Prompt assist output: %r", structured[:200])
