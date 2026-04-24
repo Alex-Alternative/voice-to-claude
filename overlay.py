@@ -244,7 +244,6 @@ def show_prompt_preview(text, callbacks):
         root = tk.Tk()
         root_holder["r"] = root
         root.title("Koda — Prompt Preview")
-        # Koda logo in the title bar — koda.ico lives next to this module.
         try:
             icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "koda.ico")
             if os.path.exists(icon_path):
@@ -252,110 +251,203 @@ def show_prompt_preview(text, callbacks):
         except Exception:
             pass
         root.attributes("-topmost", True)
-        # Design palette — aligned with Koda's dark tray theme.
-        BG      = "#14161a"   # window background
-        SURFACE = "#1d2026"   # card / text surface
-        BORDER  = "#2a2e36"   # subtle border
-        FG      = "#eceef2"   # primary text
-        DIM     = "#8a8f99"   # secondary text / hints
-        root.configure(bg=BG)
-        W, H = 720, 520
+        root.attributes("-alpha", 0.0)  # fade in on show
+
+        # -------------------------------------------------------------
+        # Koda Dark v2 — layered surfaces, semantic accents, type scale
+        # -------------------------------------------------------------
+        BG_BASE     = "#0e1013"   # window background (deepest)
+        BG_SURFACE  = "#16191f"   # raised card (body)
+        BG_ELEVATED = "#1e222a"   # hover / interactive surface
+        HAIRLINE    = "#242932"   # 1px separators
+        TEXT        = "#e6e8ec"
+        TEXT_DIM    = "#a6adba"
+        TEXT_MUTED  = "#6b7280"
+        BRAND       = "#2ecc71"   # Koda green
+        INFO        = "#60a5fa"   # refine
+        WARN        = "#f59e0b"   # add
+        DANGER      = "#f87171"   # cancel (softer than saturated red)
+
+        # Intent-pill color map — lights up with detected intent.
+        INTENT_COLORS = {
+            "code":    BRAND,
+            "debug":   WARN,
+            "explain": INFO,
+            "review":  "#c084fc",
+            "write":   "#f472b6",
+            "general": TEXT_MUTED,
+        }
+
+        root.configure(bg=BG_BASE)
+        W, H = 760, 580
         sw = root.winfo_screenwidth()
         sh = root.winfo_screenheight()
         root.geometry(f"{W}x{H}+{(sw - W) // 2}+{(sh - H) // 2}")
 
-        # -------- Header --------
-        header = tk.Frame(root, bg=BG)
-        header.pack(side="top", fill="x", padx=20, pady=(18, 8))
+        # =============== FOOTER (hints) — packed bottom first ===============
+        footer = tk.Frame(root, bg=BG_BASE)
+        footer.pack(side="bottom", fill="x", padx=28, pady=(0, 14))
         tk.Label(
-            header, text="Koda", bg=BG, fg=FG,
-            font=("Segoe UI Semibold", 13),
-        ).pack(side="left")
-        tk.Label(
-            header, text="  Prompt Preview", bg=BG, fg=DIM,
-            font=("Segoe UI", 11),
-        ).pack(side="left")
-        # Keyboard hint right-aligned.
-        tk.Label(
-            header, text="Enter = Paste    Esc = Cancel", bg=BG, fg=DIM,
-            font=("Segoe UI", 9),
+            footer, text="⏎  Paste       Esc  Cancel",
+            bg=BG_BASE, fg=TEXT_MUTED, font=("Segoe UI", 9),
         ).pack(side="right")
 
-        # -------- Button row packs BOTTOM first so it reserves its space --------
-        btn_row = tk.Frame(root, bg=BG)
-        btn_row.pack(side="bottom", fill="x", padx=20, pady=(10, 18))
+        # Hairline above footer (between buttons and hints)
+        tk.Frame(root, bg=HAIRLINE, height=1).pack(
+            side="bottom", fill="x", padx=28, pady=(12, 10),
+        )
 
-        # Optional inline append frame is packed just above btn_row when revealed.
+        # =============== BUTTON ROW ===============
+        btn_row = tk.Frame(root, bg=BG_BASE)
+        btn_row.pack(side="bottom", fill="x", padx=28)
+
         add_holder = {"frame": None}
 
-        # -------- Body (prompt preview card) --------
-        body = tk.Frame(root, bg=SURFACE, highlightbackground=BORDER, highlightthickness=1)
-        body.pack(side="top", fill="both", expand=True, padx=20, pady=(4, 10))
+        # =============== HEADER (brand lockup + intent pill) ===============
+        header = tk.Frame(root, bg=BG_BASE)
+        header.pack(side="top", fill="x", padx=28, pady=(22, 14))
+
+        # Koda K mark at 40px with brand-green status dot
+        try:
+            from voice import create_branded_icon
+            mark_img = create_branded_icon(40, dot_color=BRAND)
+            mark_photo = ImageTk.PhotoImage(mark_img)
+            mark_label = tk.Label(header, image=mark_photo, bg=BG_BASE, bd=0)
+            mark_label.image = mark_photo  # prevent GC
+            mark_label.pack(side="left", padx=(0, 14))
+        except Exception as e:
+            logger.debug("brand mark render failed: %s", e)
+
+        title_col = tk.Frame(header, bg=BG_BASE)
+        title_col.pack(side="left", fill="y")
+        tk.Label(
+            title_col, text="Koda", bg=BG_BASE, fg=TEXT,
+            font=("Segoe UI", 18, "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            title_col, text="Prompt Preview  ·  Review before paste",
+            bg=BG_BASE, fg=TEXT_DIM, font=("Segoe UI", 10),
+        ).pack(anchor="w", pady=(2, 0))
+
+        # Intent pill — right side, color per detected intent
+        try:
+            from prompt_assist import detect_intent
+            intent = detect_intent(text or "")
+            pill_color = INTENT_COLORS.get(intent, TEXT_MUTED)
+            tk.Label(
+                header, text=f"  {intent.upper()}  ",
+                bg=BG_ELEVATED, fg=pill_color,
+                font=("Segoe UI Semibold", 9),
+                padx=12, pady=6,
+            ).pack(side="right", pady=(8, 0))
+        except Exception as e:
+            logger.debug("intent pill render failed: %s", e)
+
+        # Hairline under header
+        tk.Frame(root, bg=HAIRLINE, height=1).pack(side="top", fill="x", padx=28)
+
+        # =============== BODY (prompt card) ===============
+        body_wrap = tk.Frame(root, bg=BG_BASE)
+        body_wrap.pack(side="top", fill="both", expand=True, padx=28, pady=18)
+
+        body = tk.Frame(body_wrap, bg=BG_SURFACE)
+        body.pack(fill="both", expand=True)
+
+        # 1px top-edge highlight — faked depth (lighter line = raised card feel)
+        tk.Frame(body, bg=BG_ELEVATED, height=1).pack(side="top", fill="x")
+
         txt = tk.Text(
-            body, wrap="word", bg=SURFACE, fg=FG, bd=0, highlightthickness=0,
-            font=("Segoe UI", 11), padx=16, pady=14,
-            insertbackground=FG, selectbackground="#355074",
-            spacing1=2, spacing3=2,
+            body, wrap="word", bg=BG_SURFACE, fg=TEXT, bd=0,
+            highlightthickness=0, font=("Segoe UI", 13),
+            padx=24, pady=22, insertbackground=TEXT,
+            selectbackground="#2a3550", spacing1=4, spacing3=4,
         )
         txt.insert("1.0", text or "")
         txt.config(state="disabled")
-        scroll = tk.Scrollbar(body, command=txt.yview, bg=SURFACE,
-                              troughcolor=SURFACE, bd=0, highlightthickness=0,
-                              activebackground="#3a3e48", width=10)
+        scroll = tk.Scrollbar(
+            body, command=txt.yview, bg=BG_SURFACE,
+            troughcolor=BG_SURFACE, bd=0, highlightthickness=0,
+            activebackground=BG_ELEVATED, width=10,
+        )
         txt.config(yscrollcommand=scroll.set)
         txt.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
-        # -------- Custom flat buttons (tk.Label + click binding) --------
-        # tk.Button on Windows renders the native raised bevel even with bd=0
-        # and relief="flat" — impossible to fully flatten. Label-as-button
-        # gives total control over appearance + hover states.
-        def _make_button(parent, label, accent, action, *, primary=False):
-            bg = accent if primary else SURFACE
-            fg = "#ffffff" if primary else accent
-            hover_bg = _lighten(accent, 0.15) if primary else BORDER
+        # =============== BUTTON FACTORIES ===============
+        # Three hierarchies — text (ghost), elevated (secondary prominent),
+        # primary (solid CTA). No 1px borders anywhere; differentiation
+        # comes from weight + background contrast, not chrome.
+        def _make_text_btn(parent, label, color, action):
             btn = tk.Label(
-                parent, text=label, bg=bg, fg=fg,
-                padx=22, pady=10,
+                parent, text=label, bg=BG_BASE, fg=color,
                 font=("Segoe UI Semibold", 10),
-                cursor="hand2",
+                padx=14, pady=11, cursor="hand2",
             )
-            if not primary:
-                btn.configure(highlightbackground=BORDER, highlightthickness=1)
             btn.bind("<Button-1>", lambda e: action())
-            btn.bind("<Enter>", lambda e: btn.configure(bg=hover_bg))
-            btn.bind("<Leave>", lambda e: btn.configure(bg=bg))
+            btn.bind("<Enter>", lambda e: btn.configure(fg=_lighten(color, 0.3)))
+            btn.bind("<Leave>", lambda e: btn.configure(fg=color))
             return btn
 
+        def _make_elevated_btn(parent, label, color, action):
+            btn = tk.Label(
+                parent, text=label, bg=BG_ELEVATED, fg=color,
+                font=("Segoe UI Semibold", 10),
+                padx=20, pady=11, cursor="hand2",
+            )
+            hover_bg = _lighten(BG_ELEVATED, 0.35)
+            btn.bind("<Button-1>", lambda e: action())
+            btn.bind("<Enter>", lambda e: btn.configure(bg=hover_bg))
+            btn.bind("<Leave>", lambda e: btn.configure(bg=BG_ELEVATED))
+            return btn
+
+        def _make_primary_btn(parent, label, action):
+            btn = tk.Label(
+                parent, text=label, bg=BRAND, fg="#0a0c0f",
+                font=("Segoe UI Semibold", 11),
+                padx=26, pady=12, cursor="hand2",
+            )
+            hover_bg = _lighten(BRAND, 0.12)
+            btn.bind("<Button-1>", lambda e: action())
+            btn.bind("<Enter>", lambda e: btn.configure(bg=hover_bg))
+            btn.bind("<Leave>", lambda e: btn.configure(bg=BRAND))
+            return btn
+
+        # =============== ADD-INLINE ===============
         def _show_add_inline():
             if add_holder["frame"]:
                 return
-            af = tk.Frame(root, bg=BG)
-            af.pack(side="bottom", fill="x", padx=20, pady=(0, 10), before=btn_row)
-            tk.Label(af, text="Append:", bg=BG, fg=DIM,
+            af = tk.Frame(root, bg=BG_BASE)
+            af.pack(side="bottom", fill="x", padx=28, pady=(0, 10), before=btn_row)
+            tk.Label(af, text="Append:", bg=BG_BASE, fg=TEXT_DIM,
                      font=("Segoe UI", 10)).pack(side="left", padx=(0, 10))
             entry = tk.Entry(
-                af, bg=SURFACE, fg=FG, insertbackground=FG, bd=0,
-                font=("Segoe UI", 11), relief="flat",
-                highlightbackground=BORDER, highlightcolor="#4a84d8",
+                af, bg=BG_SURFACE, fg=TEXT, insertbackground=TEXT, bd=0,
+                font=("Segoe UI", 12), relief="flat",
+                highlightbackground=HAIRLINE, highlightcolor=INFO,
                 highlightthickness=1,
             )
-            entry.pack(side="left", fill="x", expand=True, ipady=7, padx=(0, 10))
+            entry.pack(side="left", fill="x", expand=True, ipady=8, padx=(0, 10))
             entry.focus_set()
             def _confirm_add(_=None):
                 _fire("on_add", entry.get().strip())
             entry.bind("<Return>", _confirm_add)
             entry.bind("<Escape>", lambda e: _fire("on_cancel"))
-            _make_button(af, "OK", "#2ecc71", _confirm_add, primary=True).pack(side="left")
+            _make_primary_btn(af, "OK", _confirm_add).pack(side="left")
             add_holder["frame"] = af
 
-        # Primary action (Paste) on the right; secondary actions on the left.
-        # Right-aligned primary button matches modern OS dialog conventions.
-        _make_button(btn_row, "Cancel", "#e74c3c", lambda: _fire("on_cancel")).pack(side="left")
-        _make_button(btn_row, "Add", "#f39c12", _show_add_inline).pack(side="left", padx=(8, 0))
-        _make_button(btn_row, "Refine", "#3498db", lambda: _fire("on_refine")).pack(side="left", padx=(8, 0))
-        _make_button(btn_row, "Paste", "#2ecc71", lambda: _fire("on_confirm"), primary=True).pack(side="right")
+        # =============== BUTTON LAYOUT ===============
+        # Left: ghost destructive + ghost secondary.
+        # Right: elevated secondary + solid primary (modern OS convention).
+        _make_text_btn(btn_row, "Cancel", DANGER,
+                       lambda: _fire("on_cancel")).pack(side="left")
+        _make_text_btn(btn_row, "＋  Add", WARN,
+                       _show_add_inline).pack(side="left", padx=(2, 0))
+        _make_primary_btn(btn_row, "Paste",
+                          lambda: _fire("on_confirm")).pack(side="right")
+        _make_elevated_btn(btn_row, "Refine", INFO,
+                           lambda: _fire("on_refine")).pack(side="right", padx=(0, 10))
 
+        # =============== BINDINGS ===============
         root.bind("<Escape>", lambda e: _fire("on_cancel"))
         root.bind("<Return>", lambda e: _fire("on_confirm"))
         root.protocol("WM_DELETE_WINDOW", lambda: _fire("on_cancel"))
@@ -366,13 +458,23 @@ def show_prompt_preview(text, callbacks):
         except Exception:
             pass
 
+        # Fade in over ~150ms — softens modal appearance, no animation feels abrupt
+        def _fade(alpha=0.0):
+            alpha = min(1.0, alpha + 0.12)
+            try:
+                root.attributes("-alpha", alpha)
+            except Exception:
+                return
+            if alpha < 1.0:
+                root.after(15, _fade, alpha)
+        _fade()
+
         try:
             root.mainloop()
         except Exception as e:
             logger.error("prompt_preview mainloop crashed: %s", e, exc_info=True)
         finally:
             if not decided["v"]:
-                # Window closed without firing — treat as cancel
                 try:
                     cb = callbacks.get("on_cancel")
                     if cb:
