@@ -724,12 +724,12 @@ def show_summary_and_save(config):
     print(f"    Filler removal:   {'On' if config['post_processing']['remove_filler_words'] else 'Off'}")
     print(f"    Noise reduction:  {'On' if config['noise_reduction'] else 'Off'}")
     print(f"    Wake word:        {'On (\"Hey Koda\")' if config['wake_word']['enabled'] else 'Off'}")
-    print(f"    LLM polish:       {'On (' + config['llm_polish']['model'] + ')' if config['llm_polish']['enabled'] else 'Off'}")
     pa = config.get("prompt_assist", {})
     backend_label = {"none": "Template only", "ollama": "Local Ollama", "api": f"API ({pa.get('api_provider') or 'unset'})"}.get(pa.get("refine_backend", "none"), "Template only")
     voice_label = config.get("tts", {}).get("voice") or "System default"
     print(f"    Prompt voice:     {voice_label}")
-    print(f"    Prompt polish:    {backend_label}")
+    print(f"    Prompt polish:    {backend_label}  (prompt-assist mode)")
+    print(f"    Command polish:   {('On (' + config['llm_polish']['model'] + ')') if config['llm_polish']['enabled'] else 'Off'}  (command mode)")
     print()
 
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -792,6 +792,7 @@ def main():
         "vad": {
             "enabled": True,
             "silence_timeout_ms": 1500,
+            "rms_threshold": 0.005,
         },
         "wake_word": {
             "enabled": wake_word_enabled,
