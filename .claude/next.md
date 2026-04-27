@@ -29,8 +29,8 @@
 
 - [x] **Memory git-sync repo created** — `Moonhawk80/koda-memory` (private). Work PC pushed initial 27 .md files; home PC cloned + merged 5 home-only files + reorganized MEMORY.md index + refreshed stale `project_koda.md`.
 - [x] **Auto-sync hooks installed (home PC)** — `~/.claude/settings.json` got SessionStart pull + Stop commit/push hooks. Async, log to `~/.claude/koda-memory-sync.log`.
-- [ ] **Work PC: git pull on koda-memory** to get home-PC's 5 unique files + merged MEMORY.md index. Do FIRST in next work-PC session.
-- [ ] **Work PC: install matching auto-sync hooks** — same shape as home PC but wrap git ops with `gh auth switch --user Moonhawk80 && ... && gh auth switch --user Alex-Alternative` since work PC's daily-driver gh account is Alex-Alternative.
+- [x] **Work PC: git pull on koda-memory** — done session 48 (Mon 4/27). Pulled 11 files total (6 from session 47 morning batch + 5 from Saturday-evening Atlas Navy design batch).
+- [x] **Work PC: install matching auto-sync hooks** — done session 48 (Fri 4/24). SessionStart pull + Stop commit/push installed in `~/.claude/settings.json`. Auth-switch dance wrapped per fire. Pipe-tested clean. Active gh stays Alex-Alternative.
 
 ## Runtime-test carried over
 
@@ -45,7 +45,7 @@
 - [ ] Wake word decision — train custom "hey koda" via openwakeword OR rip feature
 - [ ] Phase 9 RDP test (pending since session 35)
 - [ ] V2 app-launch: chaining ("open powershell and type git status"), window-ready check, "switch to X"
-- [ ] Memory sync across machines — home PC writes to `C--Users-alexi/`, work PC to `C--Users-alex/`. Parked per Alex's request. Options: rename Windows user / OneDrive symlink / private git repo.
+- [x] Memory sync across machines — SHIPPED via `Moonhawk80/koda-memory` private repo + auto-sync hooks on both PCs (sessions 47 + 48). See `reference_koda_memory_repo.md` memory.
 
 ## Completed this session (work-PC session 45)
 
