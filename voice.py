@@ -267,6 +267,10 @@ _COLOR_TO_STATE = {
 def update_tray(color, tooltip):
     if tray_icon:
         tray_icon.icon = create_icon(color)
+        if (config.get("system_check_tier") == "POWER"
+            and config.get("system_check_mode", "auto-detect") in ("auto-detect", "power")
+            and tooltip.startswith("Koda")):
+            tooltip = "Koda — Power Mode" + tooltip[len("Koda"):]
         tray_icon.title = tooltip
     # Update floating overlay
     if overlay:

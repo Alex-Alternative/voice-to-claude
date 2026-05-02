@@ -816,6 +816,26 @@ class KodaSettings(tk.Tk):
         )
         self._status_label.pack(anchor="w", pady=(0, 8))
 
+        # Power Mode badge — shown only when tier=POWER and the user is on
+        # auto-detect or explicit power mode. tk.Label (not ttk) so we can
+        # paint the Atlas Navy background directly.
+        if tier == "POWER" and current_mode in ("auto-detect", "power"):
+            badge_frame = ttk.Frame(parent)
+            badge_frame.pack(fill="x", pady=(0, 8))
+            tk.Label(
+                badge_frame,
+                text="  Power Mode: Active  ",
+                bg="#1c5fb8", fg="#eef2f7",
+                font=(FONT_BODY, 9, "bold"),
+                padx=8, pady=2,
+            ).pack(side="left")
+            ttk.Label(
+                badge_frame,
+                text="Using NVIDIA GPU acceleration via CUDA",
+                font=(FONT_BODY, 9),
+                foreground=palette["text_dim"],
+            ).pack(side="left", padx=(8, 0))
+
         # Performance Mode dropdown
         mode_frame = ttk.Frame(parent)
         mode_frame.pack(fill="x", pady=(0, 8))
