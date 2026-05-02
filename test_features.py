@@ -3424,5 +3424,50 @@ class TestSystemCheckCli(unittest.TestCase):
         self.assertIn(parsed["tier"], ["BLOCKED", "MINIMUM", "RECOMMENDED", "POWER"])
 
 
+class TestThresholdsIssUpToDate(unittest.TestCase):
+    """Guard against drift: regenerating thresholds.iss must produce no diff."""
+
+    def test_thresholds_iss_matches_constants(self):
+        import subprocess
+        import tempfile
+
+        installer_dir = os.path.join(os.path.dirname(__file__), "installer")
+        existing_path = os.path.join(installer_dir, "thresholds.iss")
+
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".iss") as f:
+            tmp_path = f.name
+
+        try:
+            # Run codegen with a custom output target
+            env = os.environ.copy()
+            result = subprocess.run(
+                [sys.executable, os.path.join(installer_dir, "build_thresholds_iss.py")],
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+            with open(existing_path, "r", encoding="utf-8") as f:
+                existing = f.read()
+
+            # Re-run the codegen — content should match what's already on disk
+            result2 = subprocess.run(
+                [sys.executable, os.path.join(installer_dir, "build_thresholds_iss.py")],
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result2.returncode, 0)
+
+            with open(existing_path, "r", encoding="utf-8") as f:
+                regenerated = f.read()
+
+            self.assertEqual(
+                existing, regenerated,
+                msg="thresholds.iss is out of date — run "
+                    "`python installer/build_thresholds_iss.py` and commit.",
+            )
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+
 if __name__ == "__main__":
     unittest.main()
