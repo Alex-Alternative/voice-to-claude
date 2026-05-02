@@ -2072,6 +2072,38 @@ def _on_update_check_result(latest_version, download_url):
         logger.info("Update available: v%s (download: %s)", latest_version, download_url)
 
 
+def _maybe_show_power_unlock_balloon():
+    """One-time tray balloon when a new NVIDIA GPU appears between runs.
+
+    Auto-detect users only — manual overrides keep their chosen tier.
+    Stamps the new tier and a flag so the balloon never re-fires.
+    """
+    if config.get("power_mode_balloon_shown", False):
+        return
+    if config.get("system_check_mode", "auto-detect") != "auto-detect":
+        return
+    if config.get("system_check_tier", "RECOMMENDED") == "POWER":
+        return
+    try:
+        from system_check import classify
+        result = classify()
+    except Exception:
+        return
+    if result.get("tier") != "POWER":
+        return
+    config["system_check_tier"] = "POWER"
+    config["power_mode_balloon_shown"] = True
+    save_config(config)
+    if tray_icon:
+        try:
+            tray_icon.notify(
+                "Power Mode just activated — your new GPU is ready.",
+                "Koda",
+            )
+        except Exception:
+            pass
+
+
 def run_setup():
     global stream, overlay, profile_monitor, base_config
 
@@ -2137,6 +2169,7 @@ def run_setup():
         except Exception:
             pass
     flush_pending_error_notifications()
+    _maybe_show_power_unlock_balloon()
 
     # First-run welcome — show hotkey cheat sheet on first launch
     _first_run_path = os.path.join(_DATA_DIR, ".koda_initialized")

@@ -94,6 +94,9 @@ DEFAULT_CONFIG = {
         "enabled": False,
         "auto_detect_apps": True,
     },
+    # Set true once the one-time "Power Mode just activated" tray balloon has
+    # fired so users who add a new NVIDIA GPU post-install see it exactly once.
+    "power_mode_balloon_shown": False,
 }
 
 
