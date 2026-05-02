@@ -3359,5 +3359,40 @@ class TestSystemCheckMinimum(unittest.TestCase):
         self.assertEqual(result["tier"], "RECOMMENDED")
 
 
+class TestSystemCheckPower(unittest.TestCase):
+    """POWER tier — NVIDIA GPU detected with usable CUDA runtime."""
+
+    def test_power_with_cuda(self):
+        from system_check import classify
+        with patch("system_check._detect_ram_gb", return_value=32), \
+             patch("system_check._detect_cores", return_value=12), \
+             patch("system_check._detect_free_disk_gb", return_value=200), \
+             patch("system_check._detect_win_build", return_value=22000), \
+             patch("system_check._detect_cpu_name", return_value="Intel i7-13700"), \
+             patch("system_check._detect_nvidia_gpu", return_value="NVIDIA GeForce RTX 4060"), \
+             patch("system_check._detect_cuda_runtime", return_value=True):
+            result = classify()
+            self.assertEqual(result["tier"], "POWER")
+            self.assertEqual(result["defaults"]["model_size"], "large-v3-turbo")
+            self.assertEqual(result["defaults"]["compute_type"], "float16")
+            self.assertEqual(result["hardware"]["nvidia_gpu_name"], "NVIDIA GeForce RTX 4060")
+            self.assertTrue(result["hardware"]["cuda_runtime_usable"])
+
+    def test_power_falls_to_recommended_if_cuda_not_usable(self):
+        """NVIDIA detected but ctranslate2 cannot use CUDA → RECOMMENDED, not POWER."""
+        from system_check import classify
+        with patch("system_check._detect_ram_gb", return_value=32), \
+             patch("system_check._detect_cores", return_value=12), \
+             patch("system_check._detect_free_disk_gb", return_value=200), \
+             patch("system_check._detect_win_build", return_value=22000), \
+             patch("system_check._detect_cpu_name", return_value="Intel i7-13700"), \
+             patch("system_check._detect_nvidia_gpu", return_value="NVIDIA GeForce RTX 4060"), \
+             patch("system_check._detect_cuda_runtime", return_value=False):
+            result = classify()
+            self.assertEqual(result["tier"], "RECOMMENDED")
+            self.assertEqual(result["hardware"]["nvidia_gpu_name"], "NVIDIA GeForce RTX 4060")
+            self.assertFalse(result["hardware"]["cuda_runtime_usable"])
+
+
 if __name__ == "__main__":
     unittest.main()
