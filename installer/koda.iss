@@ -201,13 +201,14 @@ begin
   mciSendString('play kodasuccess', '', 0, 0);
 end;
 
-{ Compose the Power Mode celebration page — banner bitmap + GPU name
-  label + body copy + Continue/Standard radio choice. Called once from
-  InitializeWizard when DetectedTier = 'POWER'. }
+{ Compose the Power Mode celebration page — banner bitmap (carries the
+  POWER MODE / Hardware acceleration messaging itself) + dim machine-
+  specific GPU name label + Continue/Standard radio choice. Called once
+  from InitializeWizard when DetectedTier = 'POWER'. }
 procedure CreatePowerPageContent(Page: TWizardPage);
 var
   Banner: TBitmapImage;
-  GpuLabel, BodyLabel: TNewStaticText;
+  GpuLabel: TNewStaticText;
   StandardRadio: TNewRadioButton;
 begin
   ExtractTemporaryFile('power_banner.bmp');
@@ -220,33 +221,26 @@ begin
   Banner.Height := 300;
   Banner.Bitmap.LoadFromFile(ExpandConstant('{tmp}\power_banner.bmp'));
 
-  BodyLabel := TNewStaticText.Create(Page);
-  BodyLabel.Parent := Page.Surface;
-  BodyLabel.Caption := 'Near-instant transcription. Larger, more accurate model.';
-  BodyLabel.Left := 0;
-  BodyLabel.Top := 312;
-  BodyLabel.Width := Page.SurfaceWidth;
-  BodyLabel.AutoSize := False;
-  BodyLabel.Font.Style := [fsBold];
-
+  { Dim machine-specific GPU name — banner can't carry this dynamically }
   GpuLabel := TNewStaticText.Create(Page);
   GpuLabel.Parent := Page.Surface;
   GpuLabel.Caption := 'Detected: ' + GetNvidiaGpuNameForDisplay;
   GpuLabel.Left := 0;
-  GpuLabel.Top := 334;
+  GpuLabel.Top := 314;
   GpuLabel.Width := Page.SurfaceWidth;
+  GpuLabel.Font.Color := $00808080;
 
   PowerPageContinueRadio := TNewRadioButton.Create(Page);
   PowerPageContinueRadio.Parent := Page.Surface;
   PowerPageContinueRadio.Caption := 'Continue with Power Mode';
-  PowerPageContinueRadio.Top := 372;
+  PowerPageContinueRadio.Top := 348;
   PowerPageContinueRadio.Width := Page.SurfaceWidth;
   PowerPageContinueRadio.Checked := True;
 
   StandardRadio := TNewRadioButton.Create(Page);
   StandardRadio.Parent := Page.Surface;
   StandardRadio.Caption := 'Use Standard Mode instead';
-  StandardRadio.Top := 397;
+  StandardRadio.Top := 373;
   StandardRadio.Width := Page.SurfaceWidth;
 end;
 
