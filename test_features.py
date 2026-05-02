@@ -3429,17 +3429,16 @@ class TestThresholdsIssUpToDate(unittest.TestCase):
 
     def test_thresholds_iss_matches_constants(self):
         import subprocess
-        import tempfile
 
         installer_dir = os.path.join(os.path.dirname(__file__), "installer")
         existing_path = os.path.join(installer_dir, "thresholds.iss")
 
-        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".iss") as f:
-            tmp_path = f.name
+        # Snapshot current on-disk content BEFORE regenerating
+        with open(existing_path, "r", encoding="utf-8") as f:
+            before = f.read()
 
         try:
-            # Run codegen with a custom output target
-            env = os.environ.copy()
+            # Regenerate thresholds.iss from system_check_constants.py
             result = subprocess.run(
                 [sys.executable, os.path.join(installer_dir, "build_thresholds_iss.py")],
                 capture_output=True, text=True, timeout=10,
@@ -3447,26 +3446,18 @@ class TestThresholdsIssUpToDate(unittest.TestCase):
             self.assertEqual(result.returncode, 0, msg=result.stderr)
 
             with open(existing_path, "r", encoding="utf-8") as f:
-                existing = f.read()
-
-            # Re-run the codegen — content should match what's already on disk
-            result2 = subprocess.run(
-                [sys.executable, os.path.join(installer_dir, "build_thresholds_iss.py")],
-                capture_output=True, text=True, timeout=10,
-            )
-            self.assertEqual(result2.returncode, 0)
-
-            with open(existing_path, "r", encoding="utf-8") as f:
-                regenerated = f.read()
+                after = f.read()
 
             self.assertEqual(
-                existing, regenerated,
+                before, after,
                 msg="thresholds.iss is out of date — run "
                     "`python installer/build_thresholds_iss.py` and commit.",
             )
         finally:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
+            # Always restore the pre-test content so a failing assertion
+            # doesn't leave a regenerated file on disk
+            with open(existing_path, "w", encoding="utf-8", newline="") as f:
+                f.write(before)
 
 
 if __name__ == "__main__":
