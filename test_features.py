@@ -9,6 +9,7 @@ import glob
 import json
 import os
 import sqlite3
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
@@ -3392,6 +3393,35 @@ class TestSystemCheckPower(unittest.TestCase):
             self.assertEqual(result["tier"], "RECOMMENDED")
             self.assertEqual(result["hardware"]["nvidia_gpu_name"], "NVIDIA GeForce RTX 4060")
             self.assertFalse(result["hardware"]["cuda_runtime_usable"])
+
+
+class TestSystemCheckFallback(unittest.TestCase):
+    """Detection failure must fall back to MINIMUM, never block the user."""
+
+    def test_detection_failure_falls_to_minimum(self):
+        from system_check import classify
+        with patch("system_check._detect_ram_gb", side_effect=OSError("registry locked")):
+            result = classify()
+            self.assertEqual(result["tier"], "MINIMUM")
+            self.assertTrue(any(r.startswith("detection_failed:") for r in result["reasons"]))
+            self.assertEqual(result["defaults"]["model_size"], "tiny")
+
+
+class TestSystemCheckCli(unittest.TestCase):
+    """The --json CLI mode used by the Inno installer."""
+
+    def test_cli_json_mode_emits_valid_json(self):
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, "system_check.py", "--json"],
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 0)
+        parsed = json.loads(result.stdout)
+        self.assertIn("tier", parsed)
+        self.assertIn("hardware", parsed)
+        self.assertIn("defaults", parsed)
+        self.assertIn(parsed["tier"], ["BLOCKED", "MINIMUM", "RECOMMENDED", "POWER"])
 
 
 if __name__ == "__main__":
