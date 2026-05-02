@@ -2221,6 +2221,19 @@ def _acquire_single_instance():
 
 
 def main():
+    # Hardware-detect CLI flag (used by Inno installer at ssPostInstall).
+    # Must be the very first thing in main() so the installer gets a fast
+    # exit — no config load, no tray init, no model load.
+    if "--detect-hardware" in sys.argv:
+        import json
+        from system_check import classify
+        result = classify()
+        if "--json" in sys.argv:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"Tier: {result['tier']}")
+        sys.exit(0)
+
     global tray_icon, config
 
     _acquire_single_instance()

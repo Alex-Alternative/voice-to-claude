@@ -8,6 +8,12 @@
 ; Build: "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" koda.iss
 ; Requires: Inno Setup 6 — https://jrsoftware.org/isdl.php
 
+; Pull in tier-classification thresholds (auto-generated from
+; system_check_constants.py). Defines global #define symbols consumed
+; by system_check.iss inside [Code]. Must be #include'd at script top
+; scope so the #define's are visible to subsequent includes.
+#include "thresholds.iss"
+
 #define MyAppName "Koda"
 #define MyAppVersion "4.4.0-beta1"
 #define MyAppVersionNumeric "4.4.0.1"
@@ -116,8 +122,11 @@ Type: dirifempty; Name: "{app}\sounds"
 Type: dirifempty; Name: "{app}"
 
 [Code]
+#include "system_check.iss"
+
 { ------------------------------------------------------------------ }
 { Custom wizard pages                                                  }
+{   Tier pages — BLOCKED hard-stop / MINIMUM soft-warn (conditional)  }
 {   Page 1 — Microphone guidance (informational)                      }
 {   Page 2 — Activation method: Hold vs Toggle                        }
 {   Page 3 — Transcription quality (small / base / tiny)              }
@@ -129,6 +138,11 @@ var
   HotkeyPage:    TInputOptionWizardPage;
   ModelPage:     TInputOptionWizardPage;
   FormulaPage:   TInputOptionWizardPage;
+  { Tier-classification pages — created conditionally in InitializeWizard }
+  BlockedPage:   TOutputMsgWizardPage;
+  MinimumPage:   TOutputMsgWizardPage;
+  PowerPage:     TWizardPage;
+  DetectedTier:  String;
 
 { Win32 API — count audio input devices (recording devices) without }
 { needing PortAudio or any helper exe. Returns 0 when no mic is set up. }
@@ -140,6 +154,41 @@ var
   MicMsg: String;
   DeviceCount: Cardinal;
 begin
+  { Classify hardware first — pages added below depend on tier }
+  DetectedTier := ClassifyTier;
+
+  { BLOCKED — hard-stop page; user must Cancel (forward nav blocked below) }
+  if DetectedTier = 'BLOCKED' then
+  begin
+    BlockedPage := CreateOutputMsgPage(
+      wpWelcome,
+      'System Requirements Not Met',
+      'Your PC does not meet the minimum requirements for Koda.',
+      'Koda needs:' + #13#10 +
+      '  - At least 2 GB of RAM' + #13#10 +
+      '  - At least 4 GB of free disk space' + #13#10 +
+      '  - Windows 10 (May 2020 update) or later' + #13#10 + #13#10 +
+      'Setup will close. Please upgrade your hardware or operating ' +
+      'system and try again.'
+    );
+  end;
+
+  { MINIMUM — soft-warn page; user can continue }
+  if DetectedTier = 'MINIMUM' then
+  begin
+    MinimumPage := CreateOutputMsgPage(
+      wpWelcome,
+      'Below Recommended Specs',
+      'Koda will work, but transcription will be slower than typical.',
+      'Your PC is below the recommended specs for Koda.' + #13#10 + #13#10 +
+      'Koda will configure itself for the best experience your PC can ' +
+      'deliver. Estimated transcription time: 12-25 seconds for a ' +
+      '60-second clip.' + #13#10 + #13#10 +
+      'You can change these settings later in Koda > Settings > ' +
+      'Performance.'
+    );
+  end;
+
   { PAGE 1 — Microphone guidance }
   DeviceCount := waveInGetNumDevs();
 
@@ -222,27 +271,146 @@ begin
   FormulaPage.Values[1] := True;  { default: disabled — user opts in }
 end;
 
+{ Minimal JSON extractor — only reads the top-level "tier" string field.
+  Avoids pulling in a full JSON parser. PascalScript-safe: uses a large
+  literal length instead of MaxInt, and Copy() is 1-indexed. }
+function ExtractTierFromJson(const JsonText: String): String;
+var
+  TierIdx, ColonIdx, OpenQuoteIdx, CloseQuoteIdx: Integer;
+  AfterTier, AfterColon, AfterOpenQuote: String;
+begin
+  Result := 'RECOMMENDED';  { fail-safe default }
+  TierIdx := Pos('"tier"', JsonText);
+  if TierIdx = 0 then Exit;
+
+  { Slice from "tier" to end of string and find the colon. }
+  AfterTier := Copy(JsonText, TierIdx, 1000000);
+  ColonIdx := Pos(':', AfterTier);
+  if ColonIdx = 0 then Exit;
+
+  { Slice past the colon and find the opening quote of the value. }
+  AfterColon := Copy(JsonText, TierIdx + ColonIdx, 1000000);
+  OpenQuoteIdx := Pos('"', AfterColon);
+  if OpenQuoteIdx = 0 then Exit;
+
+  { Slice past the opening quote and find the closing quote. }
+  AfterOpenQuote := Copy(JsonText, TierIdx + ColonIdx + OpenQuoteIdx, 1000000);
+  CloseQuoteIdx := Pos('"', AfterOpenQuote);
+  if CloseQuoteIdx = 0 then Exit;
+
+  { CloseQuoteIdx is the 1-indexed position of the closing quote within
+    AfterOpenQuote, so the value length is CloseQuoteIdx - 1. }
+  Result := Copy(JsonText,
+                 TierIdx + ColonIdx + OpenQuoteIdx,
+                 CloseQuoteIdx - 1);
+end;
+
+{ Build the tier-aware config.json string. Tier dictates cpu_threads and
+  process_priority; ModelSize is decided by the caller (POWER/MINIMUM
+  override the wizard pick, RECOMMENDED honors it). }
+function BuildTierAwareConfigJson(
+  const Tier, HotkeyMode, ModelSize, FormulaEnabled: String
+): String;
+var
+  CpuThreads, ProcessPriority: String;
+begin
+  { PascalScript `case` does not support String selectors — use if/elseif. }
+  if Tier = 'POWER' then
+  begin
+    CpuThreads := '4';
+    ProcessPriority := 'above_normal';
+  end
+  else if Tier = 'MINIMUM' then
+  begin
+    CpuThreads := '2';
+    ProcessPriority := 'normal';
+  end
+  else
+  begin
+    { RECOMMENDED or fallback }
+    CpuThreads := '4';
+    ProcessPriority := 'above_normal';
+  end;
+
+  Result :=
+    '{' + #13#10 +
+    '  "hotkey_mode": "' + HotkeyMode + '",' + #13#10 +
+    '  "model_size": "' + ModelSize + '",' + #13#10 +
+    '  "cpu_threads": ' + CpuThreads + ',' + #13#10 +
+    '  "process_priority": "' + ProcessPriority + '",' + #13#10 +
+    '  "system_check_tier": "' + Tier + '",' + #13#10 +
+    '  "system_check_mode": "auto-detect",' + #13#10 +
+    '  "formula_mode": {"enabled": ' + FormulaEnabled +
+                       ', "auto_detect_apps": true}' + #13#10 +
+    '}';
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   HotkeyMode, ModelSize: String;
   FormulaEnabled: String;
   ConfigDir, ConfigFile, ConfigContent: String;
+  TempJsonPath: String;
+  JsonText: AnsiString;  { LoadStringFromFile requires AnsiString in Unicode Inno }
+  ResultCode: Integer;
+  KodaExePath: String;
+  TierFromJson: String;
 begin
   if CurStep = ssPostInstall then
   begin
+    { Run the just-installed Koda.exe to get authoritative classification.
+      The CLI flag is provided by the --detect-hardware --json command. }
+    KodaExePath := ExpandConstant('{app}\Koda.exe');
+    TempJsonPath := ExpandConstant('{tmp}\hwdetect.json');
+    TierFromJson := '';
+
+    if FileExists(KodaExePath) then
+    begin
+      Exec(
+        ExpandConstant('{cmd}'),
+        '/c ""' + KodaExePath + '" --detect-hardware --json > "' + TempJsonPath + '""',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode
+      );
+      if ResultCode <> 0 then
+        Log('Koda.exe --detect-hardware exited with code ' + IntToStr(ResultCode) +
+            '; will fall back to wizard-time tier ' + DetectedTier);
+    end
+    else
+      Log('Koda.exe not found at ' + KodaExePath +
+          '; falling back to wizard-time tier ' + DetectedTier);
+
+    { Parse the tier from JSON (minimal extraction — we just need the "tier" field) }
+    if FileExists(TempJsonPath) and LoadStringFromFile(TempJsonPath, JsonText) then
+    begin
+      TierFromJson := ExtractTierFromJson(String(JsonText));
+    end
+    else
+    begin
+      { Fall back to wizard-time classification if Koda.exe didn't run }
+      TierFromJson := DetectedTier;
+    end;
+
     { Hotkey mode }
     if HotkeyPage.Values[0] then
       HotkeyMode := 'hold'
     else
       HotkeyMode := 'toggle';
 
-    { Model size }
-    if ModelPage.Values[0] then
-      ModelSize := 'small'
-    else if ModelPage.Values[1] then
-      ModelSize := 'base'
+    { Model size — tier overrides the wizard pick for POWER and MINIMUM.
+      RECOMMENDED (or any unrecognized fallback) honors what the user picked. }
+    if TierFromJson = 'POWER' then
+      ModelSize := 'large-v3-turbo'
+    else if TierFromJson = 'MINIMUM' then
+      ModelSize := 'tiny'
     else
-      ModelSize := 'tiny';
+    begin
+      if ModelPage.Values[0] then
+        ModelSize := 'small'
+      else if ModelPage.Values[1] then
+        ModelSize := 'base'
+      else
+        ModelSize := 'tiny';
+    end;
 
     { Formula mode }
     if FormulaPage.Values[0] then
@@ -250,20 +418,40 @@ begin
     else
       FormulaEnabled := 'false';
 
-    { Write config.json to %APPDATA%\Koda\ — only on fresh install }
+    { Write tier-aware config.json to %APPDATA%\Koda\ — only on fresh install }
     ConfigDir := ExpandConstant('{userappdata}') + '\Koda';
     ForceDirectories(ConfigDir);
     ConfigFile := ConfigDir + '\config.json';
 
     if not FileExists(ConfigFile) then
     begin
-      ConfigContent :=
-        '{' + #13#10 +
-        '  "hotkey_mode": "' + HotkeyMode + '",' + #13#10 +
-        '  "model_size": "' + ModelSize + '",' + #13#10 +
-        '  "formula_mode": {"enabled": ' + FormulaEnabled + ', "auto_detect_apps": true}' + #13#10 +
-        '}';
+      ConfigContent := BuildTierAwareConfigJson(
+        TierFromJson, HotkeyMode, ModelSize, FormulaEnabled
+      );
       SaveStringToFile(ConfigFile, ConfigContent, False);
     end;
+  end;
+end;
+
+{ Skip every page after the BLOCKED page so the user has nowhere to go but Cancel. }
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := False;
+  if DetectedTier = 'BLOCKED' then
+  begin
+    if (BlockedPage <> nil) and (PageID > BlockedPage.ID) then
+      Result := True;
+  end;
+end;
+
+{ Block forward navigation while the user is on the BLOCKED page. }
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if (DetectedTier = 'BLOCKED') and (BlockedPage <> nil) and
+     (CurPageID = BlockedPage.ID) then
+  begin
+    MsgBox('Setup cannot continue on this PC. Please cancel.', mbError, MB_OK);
+    Result := False;
   end;
 end;
