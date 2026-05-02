@@ -7,13 +7,10 @@ import json
 import os
 import sys
 import time
-import webbrowser
 import numpy as np
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
-
-CUDA_DOWNLOAD_URL = "https://developer.nvidia.com/cuda-downloads"
 
 
 def clear():
@@ -175,33 +172,6 @@ def _offer_cuda_install(hardware):
         input("  Press Enter to continue...")
     rec = TIER_DEFAULTS["RECOMMENDED"]
     return rec["model_size"], rec["compute_type"]
-
-
-def _save_power_mode_instructions(gpu_name):
-    """Write a plain-text reminder file to the koda folder."""
-    path = os.path.join(SCRIPT_DIR, "ENABLE_POWER_MODE.txt")
-    lines = [
-        "Koda Power Mode — Setup Instructions",
-        "=" * 40,
-        "",
-        f"Your GPU: {gpu_name}",
-        "",
-        "Power Mode gives Koda near-instant transcription and better accuracy.",
-        "To enable it:",
-        "",
-        "  1. Download the NVIDIA CUDA Toolkit (free) from:",
-        f"     {CUDA_DOWNLOAD_URL}",
-        "",
-        "  2. Install it and restart your computer.",
-        "",
-        "  3. Open Koda Settings (right-click the tray icon > Settings)",
-        "     and click 'Enable Power Mode' in the Performance section.",
-        "",
-        "  That's it — Koda will switch to Power Mode automatically.",
-        "",
-    ]
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
 
 
 # ============================================================
