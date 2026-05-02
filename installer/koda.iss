@@ -371,7 +371,13 @@ begin
         '/c ""' + KodaExePath + '" --detect-hardware --json > "' + TempJsonPath + '""',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode
       );
-    end;
+      if ResultCode <> 0 then
+        Log('Koda.exe --detect-hardware exited with code ' + IntToStr(ResultCode) +
+            '; will fall back to wizard-time tier ' + DetectedTier);
+    end
+    else
+      Log('Koda.exe not found at ' + KodaExePath +
+          '; falling back to wizard-time tier ' + DetectedTier);
 
     { Parse the tier from JSON (minimal extraction — we just need the "tier" field) }
     if FileExists(TempJsonPath) and LoadStringFromFile(TempJsonPath, JsonText) then
