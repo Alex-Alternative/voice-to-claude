@@ -3289,5 +3289,75 @@ class TestSystemCheckBlocked(unittest.TestCase):
             self.assertIn("windows_too_old", result["reasons"])
 
 
+class TestSystemCheckMinimum(unittest.TestCase):
+    """MINIMUM tier — soft warn + auto-tune to slowest defaults."""
+
+    def _baseline(self):
+        """Return a kwargs dict that classifies as RECOMMENDED. Tests modify one field."""
+        return dict(
+            ram_gb=16, cores=8, free_disk=100, win_build=22000,
+            cpu_name="Intel i7-12700", nvidia=None,
+        )
+
+    def _classify_with(self, **overrides):
+        from system_check import classify
+        kwargs = self._baseline()
+        kwargs.update(overrides)
+        with patch("system_check._detect_ram_gb", return_value=kwargs["ram_gb"]), \
+             patch("system_check._detect_cores", return_value=kwargs["cores"]), \
+             patch("system_check._detect_free_disk_gb", return_value=kwargs["free_disk"]), \
+             patch("system_check._detect_win_build", return_value=kwargs["win_build"]), \
+             patch("system_check._detect_cpu_name", return_value=kwargs["cpu_name"]), \
+             patch("system_check._detect_nvidia_gpu", return_value=kwargs["nvidia"]):
+            return classify()
+
+    def test_minimum_low_cores(self):
+        result = self._classify_with(cores=2)
+        self.assertEqual(result["tier"], "MINIMUM")
+        self.assertIn("cores_below_recommended", result["reasons"])
+        self.assertEqual(result["defaults"]["model_size"], "tiny")
+        self.assertEqual(result["defaults"]["cpu_threads"], 2)
+        self.assertEqual(result["defaults"]["process_priority"], "normal")
+
+    def test_minimum_low_ram(self):
+        result = self._classify_with(ram_gb=4)
+        self.assertEqual(result["tier"], "MINIMUM")
+        self.assertIn("ram_below_recommended", result["reasons"])
+
+    def test_minimum_low_power_cpu_atom(self):
+        result = self._classify_with(cpu_name="Intel(R) Atom(TM) x5-Z8350 CPU @ 1.44GHz")
+        self.assertEqual(result["tier"], "MINIMUM")
+        self.assertIn("low_power_cpu_class", result["reasons"])
+
+    def test_minimum_low_power_cpu_celeron(self):
+        result = self._classify_with(cpu_name="Intel(R) Celeron(R) N4020 CPU @ 1.10GHz")
+        self.assertEqual(result["tier"], "MINIMUM")
+        self.assertIn("low_power_cpu_class", result["reasons"])
+
+    def test_minimum_low_power_cpu_n100(self):
+        result = self._classify_with(cpu_name="Intel(R) N100")
+        self.assertEqual(result["tier"], "MINIMUM")
+        self.assertIn("low_power_cpu_class", result["reasons"])
+
+    def test_recommended_baseline(self):
+        result = self._classify_with()
+        self.assertEqual(result["tier"], "RECOMMENDED")
+        self.assertEqual(result["defaults"]["model_size"], "small")
+        self.assertEqual(result["defaults"]["cpu_threads"], 4)
+        self.assertEqual(result["defaults"]["process_priority"], "above_normal")
+        self.assertEqual(result["reasons"], [])
+
+    def test_recommended_does_not_match_high_end_cpu_to_low_power(self):
+        """Bug guard: 'Intel Pentium Gold' contains 'pentium' but in pattern as 'pentium gold'."""
+        result = self._classify_with(cpu_name="Intel Pentium Gold G6400")
+        self.assertEqual(result["tier"], "MINIMUM")
+        self.assertIn("low_power_cpu_class", result["reasons"])
+
+    def test_recommended_modern_xeon_not_flagged(self):
+        """A 'Xeon' workstation chip should NOT trip low-power detection."""
+        result = self._classify_with(cpu_name="Intel(R) Xeon(R) W-2245")
+        self.assertEqual(result["tier"], "RECOMMENDED")
+
+
 if __name__ == "__main__":
     unittest.main()
