@@ -773,20 +773,6 @@ class KodaSettings(tk.Tk):
 
         ttk.Button(parent, text="Update API key…", command=self._update_prompt_api_key).pack(anchor="w", pady=(4, 0))
 
-        self._section_header(parent, "Performance")
-        current_compute = self.config_data.get("compute_type", "int8")
-        mode_text = "Power Mode  (NVIDIA GPU)" if current_compute == "float16" else "Standard Mode  (CPU)"
-        ttk.Label(parent, text=f"Current: {mode_text}").pack(anchor="w")
-        self._perf_status_var = tk.StringVar(value="")
-        ttk.Label(parent, textvariable=self._perf_status_var, style="Success.TLabel").pack(anchor="w", pady=(2, 0))
-        pbr = ttk.Frame(parent); pbr.pack(anchor="w", pady=(8, 0))
-        ttk.Button(pbr, text="Check GPU", command=self._check_gpu).pack(side="left", padx=(0, 6))
-        if current_compute != "float16":
-            ttk.Button(pbr, text="Enable Power Mode", command=self._enable_power_mode).pack(side="left", padx=(0, 6))
-        else:
-            ttk.Button(pbr, text="Switch to Standard Mode", command=self._disable_power_mode).pack(side="left", padx=(0, 6))
-        ttk.Button(pbr, text="Learn more", command=self._open_cuda_url).pack(side="left")
-
         self._section_header(parent, "History")
         hbr = ttk.Frame(parent); hbr.pack(anchor="w")
         ttk.Button(hbr, text="View transcript history", command=self._open_history).pack(side="left", padx=(0, 8))
@@ -1546,71 +1532,6 @@ class KodaSettings(tk.Tk):
                 messagebox.showinfo("Koda", f"History exported to:\n{filepath}")
             except Exception as e:
                 messagebox.showerror("Koda", f"Export failed: {e}")
-
-    def _check_gpu(self):
-        """Run GPU detection and report result in the UI."""
-        self._perf_status_var.set("Checking...")
-        self.update_idletasks()
-        try:
-            from hardware import detect_gpu, get_nvidia_gpu_name
-            status = detect_gpu()
-            if status == "cuda_ready":
-                gpu = get_nvidia_gpu_name() or "NVIDIA GPU"
-                self._perf_status_var.set(f"Power Mode available — {gpu} detected with CUDA ready.")
-            elif status == "nvidia_no_cuda":
-                gpu = get_nvidia_gpu_name() or "NVIDIA GPU"
-                self._perf_status_var.set(f"{gpu} found but CUDA not set up. Click 'Enable Power Mode' to try.")
-            else:
-                self._perf_status_var.set("No NVIDIA GPU detected — Standard Mode is the right choice.")
-        except Exception as e:
-            self._perf_status_var.set(f"Detection error: {e}")
-
-    def _enable_power_mode(self):
-        """Attempt to install CUDA packages and switch to Power Mode."""
-        from tkinter import messagebox
-        self._perf_status_var.set("Installing GPU support — this may take a few minutes...")
-        self.update_idletasks()
-        try:
-            from hardware import detect_gpu, try_install_cuda_packages
-            status = detect_gpu()
-            if status == "cuda_ready":
-                self.config_data["compute_type"] = "float16"
-                self.config_data["model_size"] = "large-v3-turbo"
-                save_config(self.config_data)
-                self._perf_status_var.set("Power Mode enabled! Restart Koda to apply.")
-                messagebox.showinfo("Koda", "Power Mode enabled!\n\nRestart Koda to use your GPU.")
-            elif status == "nvidia_no_cuda":
-                success = try_install_cuda_packages()
-                if success:
-                    self.config_data["compute_type"] = "float16"
-                    self.config_data["model_size"] = "large-v3-turbo"
-                    save_config(self.config_data)
-                    self._perf_status_var.set("Power Mode enabled! Restart Koda to apply.")
-                    messagebox.showinfo("Koda", "Power Mode enabled!\n\nRestart Koda to use your GPU.")
-                else:
-                    self._perf_status_var.set("Automatic setup failed. See 'Learn more' for manual steps.")
-                    messagebox.showwarning(
-                        "Koda",
-                        "Automatic GPU setup didn't work on this system.\n\n"
-                        "Click 'Learn more' to download the NVIDIA CUDA Toolkit manually.\n"
-                        "After installing it, come back here and click 'Enable Power Mode' again."
-                    )
-            else:
-                self._perf_status_var.set("No NVIDIA GPU found — Power Mode is not available on this machine.")
-        except Exception as e:
-            self._perf_status_var.set(f"Error: {e}")
-
-    def _disable_power_mode(self):
-        """Switch back to Standard Mode (CPU)."""
-        self.config_data["compute_type"] = "int8"
-        self.config_data["model_size"] = "small"
-        save_config(self.config_data)
-        self._perf_status_var.set("Switched to Standard Mode. Restart Koda to apply.")
-
-    def _open_cuda_url(self):
-        """Open the NVIDIA CUDA download page in the browser."""
-        import webbrowser
-        webbrowser.open("https://developer.nvidia.com/cuda-downloads")
 
     def on_close(self):
         self.destroy()
