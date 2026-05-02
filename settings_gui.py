@@ -5,6 +5,7 @@ Opens from the tray menu or desktop shortcut.
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from tkinter import font as tkfont
 import json
 import logging
 import os
@@ -14,6 +15,31 @@ import time
 from config import CONFIG_PATH, CUSTOM_WORDS_PATH, DEFAULT_CUSTOM_WORDS, load_config, save_config
 
 logger = logging.getLogger("koda")
+
+
+# Paired font picker — mirrors overlay.py. Falls back gracefully on systems
+# missing Win 11 variable fonts (Segoe UI Variable Display / Variable Text).
+def _pick_fonts():
+    try:
+        # Tk must exist before tkfont.families() works. Create a hidden root,
+        # query, then destroy. Caller still creates the real Tk after.
+        _hidden = tk.Tk()
+        _hidden.withdraw()
+        installed = set(tkfont.families())
+        _hidden.destroy()
+    except Exception:
+        installed = set()
+    def pick(*candidates):
+        for c in candidates:
+            if c in installed:
+                return c
+        return candidates[-1]
+    return (
+        pick("Hubot Sans", "Segoe UI Variable Display", "Segoe UI"),
+        pick("Segoe UI Variable Text", "Segoe UI"),
+    )
+
+FONT_DISPLAY, FONT_BODY = _pick_fonts()
 
 # Windows DPI awareness. Without this, PyInstaller-frozen tkinter apps render
 # at legacy 96 DPI and Windows bitmap-upscales them — producing a tiny blurry
@@ -78,8 +104,11 @@ def _detect_system_theme():
         return "light"
 
 
-# Fluent-lite palette. `window` = outer chrome, `content` = tab-body panels.
-# Dark accent is brighter than light to keep contrast on dark bg.
+# Koda Atlas Navy palette (dark) — matches overlay.py's Slate Furnace v3 era.
+# Premium navy hero accent (#1c5fb8 Maersk/IBM/Pan-Am, NOT Tailwind blue-500)
+# on deep midnight charcoal-blue surfaces. Single-accent philosophy; success
+# uses Koda's operational green (matches the K-mark status dot convention).
+# Light mode keeps the Fluent-lite defaults — secondary use case for now.
 THEMES = {
     "light": {
         "window":    "#f5f5f5",
@@ -87,25 +116,25 @@ THEMES = {
         "border":    "#e5e7eb",
         "text":      "#1f2937",
         "text_dim":  "#6b7280",
-        "accent":    "#2563eb",
-        "accent_hv": "#1d4ed8",
+        "accent":    "#1c5fb8",   # match dark mode's Atlas navy for cross-theme brand consistency
+        "accent_hv": "#13417f",
         "accent_fg": "#ffffff",
-        "success":   "#059669",
+        "success":   "#2ecc71",   # Koda operational green (matches K-mark status dot)
         "hover":     "#eeeeee",
         "tree_sel":  "#dbeafe",
     },
     "dark": {
-        "window":    "#1f1f1f",
-        "content":   "#2b2b2b",
-        "border":    "#404040",
-        "text":      "#e5e7eb",
-        "text_dim":  "#9ca3af",
-        "accent":    "#3b82f6",
-        "accent_hv": "#60a5fa",
+        "window":    "#0e1419",   # BG_BASE — deep midnight charcoal-blue
+        "content":   "#161d24",   # BG_SURFACE — tab body panels
+        "border":    "#293340",   # HAIRLINE
+        "text":      "#eef2f7",   # cool premium white (no halation)
+        "text_dim":  "#9aa5b8",   # cool steel
+        "accent":    "#1c5fb8",   # BRAND — Atlas navy (NOT Tailwind blue)
+        "accent_hv": "#2876d4",   # lighter navy for hover
         "accent_fg": "#ffffff",
-        "success":   "#10b981",
-        "hover":     "#333333",
-        "tree_sel":  "#1e3a8a",
+        "success":   "#2ecc71",   # Koda operational green
+        "hover":     "#1f2832",   # BG_ELEVATED
+        "tree_sel":  "#13417f",   # BRAND_DIM — dimmer navy for tree selection
     },
 }
 
@@ -120,7 +149,7 @@ class RoundedButton(tk.Canvas):
     """
 
     def __init__(self, parent, text, command, *, primary, palette,
-                 width=112, height=36, radius=8, font=("Segoe UI", 10, "bold")):
+                 width=112, height=36, radius=8, font=(FONT_BODY, 10, "bold")):
         super().__init__(parent, width=width, height=height,
                          bg=palette["window"], highlightthickness=0, bd=0)
         self._text = text
@@ -265,26 +294,28 @@ class KodaSettings(tk.Tk):
         self.configure(bg=t["window"])
 
         s = self._style
-        s.configure(".",               background=t["window"],  foreground=t["text"],     font=("Segoe UI", 10))
+        s.configure(".",               background=t["window"],  foreground=t["text"],     font=(FONT_BODY, 10))
         s.configure("TFrame",          background=t["content"])
         s.configure("Chrome.TFrame",   background=t["window"])
-        s.configure("TLabel",          background=t["content"], foreground=t["text"],     font=("Segoe UI", 10))
-        s.configure("Chrome.TLabel",   background=t["window"],  foreground=t["text"],     font=("Segoe UI", 10))
-        s.configure("Title.TLabel",    background=t["window"],  foreground=t["text"],     font=("Segoe UI", 13, "bold"))
-        s.configure("Header.TLabel",   background=t["content"], foreground=t["text"],     font=("Segoe UI", 11, "bold"))
-        s.configure("Dim.TLabel",      background=t["content"], foreground=t["text_dim"], font=("Segoe UI", 9))
-        s.configure("Success.TLabel",  background=t["content"], foreground=t["success"],  font=("Segoe UI", 10))
+        s.configure("TLabel",          background=t["content"], foreground=t["text"],     font=(FONT_BODY, 10))
+        s.configure("Chrome.TLabel",   background=t["window"],  foreground=t["text"],     font=(FONT_BODY, 10))
+        # Title and Header use the same size so every "title-shaped" label
+        # in the GUI reads at consistent weight — no chunky odd-one-out.
+        s.configure("Title.TLabel",    background=t["window"],  foreground=t["text"],     font=(FONT_BODY, 11, "bold"))
+        s.configure("Header.TLabel",   background=t["content"], foreground=t["text"],     font=(FONT_BODY, 11, "bold"))
+        s.configure("Dim.TLabel",      background=t["content"], foreground=t["text_dim"], font=(FONT_BODY, 9))
+        s.configure("Success.TLabel",  background=t["content"], foreground=t["success"],  font=(FONT_BODY, 10))
 
-        s.configure("TCheckbutton",    background=t["content"], foreground=t["text"],     font=("Segoe UI", 10))
+        s.configure("TCheckbutton",    background=t["content"], foreground=t["text"],     font=(FONT_BODY, 10))
         s.map("TCheckbutton",          background=[("active", t["content"])])
-        s.configure("TRadiobutton",    background=t["content"], foreground=t["text"],     font=("Segoe UI", 10))
+        s.configure("TRadiobutton",    background=t["content"], foreground=t["text"],     font=(FONT_BODY, 10))
         s.map("TRadiobutton",          background=[("active", t["content"])])
 
         # Default button — used for the tray-style secondary actions inside tabs.
         s.configure("TButton",
                     background=t["content"], foreground=t["text"],
                     bordercolor=t["border"], lightcolor=t["border"], darkcolor=t["border"],
-                    focusthickness=0, padding=(12, 6), font=("Segoe UI", 10))
+                    focusthickness=0, padding=(12, 6), font=(FONT_BODY, 10))
         s.map("TButton",
               background=[("active", t["hover"]), ("pressed", t["hover"])],
               bordercolor=[("active", t["border"])])
@@ -292,7 +323,7 @@ class KodaSettings(tk.Tk):
         s.configure("Primary.TButton",
                     background=t["accent"], foreground=t["accent_fg"],
                     bordercolor=t["accent"], lightcolor=t["accent"], darkcolor=t["accent"],
-                    focusthickness=0, padding=(18, 8), font=("Segoe UI", 10, "bold"))
+                    focusthickness=0, padding=(18, 8), font=(FONT_BODY, 10, "bold"))
         s.map("Primary.TButton",
               background=[("active", t["accent_hv"]), ("pressed", t["accent_hv"])],
               foreground=[("active", t["accent_fg"])],
@@ -301,7 +332,7 @@ class KodaSettings(tk.Tk):
         s.configure("Secondary.TButton",
                     background=t["window"], foreground=t["text"],
                     bordercolor=t["border"], lightcolor=t["border"], darkcolor=t["border"],
-                    focusthickness=0, padding=(18, 8), font=("Segoe UI", 10))
+                    focusthickness=0, padding=(18, 8), font=(FONT_BODY, 10))
         s.map("Secondary.TButton",
               background=[("active", t["hover"]), ("pressed", t["hover"])])
 
@@ -309,7 +340,7 @@ class KodaSettings(tk.Tk):
         s.configure("Toggle.TButton",
                     background=t["window"], foreground=t["text_dim"],
                     bordercolor=t["border"], lightcolor=t["border"], darkcolor=t["border"],
-                    focusthickness=0, padding=(10, 4), font=("Segoe UI", 9))
+                    focusthickness=0, padding=(10, 4), font=(FONT_BODY, 9))
         s.map("Toggle.TButton",
               background=[("active", t["hover"]), ("pressed", t["hover"])],
               foreground=[("active", t["text"])])
@@ -319,7 +350,7 @@ class KodaSettings(tk.Tk):
                     foreground=t["text"], bordercolor=t["border"],
                     lightcolor=t["border"], darkcolor=t["border"],
                     arrowcolor=t["text"], selectbackground=t["accent"],
-                    selectforeground=t["accent_fg"], font=("Segoe UI", 10))
+                    selectforeground=t["accent_fg"], font=(FONT_BODY, 10))
         s.map("TCombobox",
               fieldbackground=[("readonly", t["content"])],
               foreground=[("readonly", t["text"])],
@@ -329,7 +360,7 @@ class KodaSettings(tk.Tk):
         s.configure("TEntry",
                     fieldbackground=t["content"], foreground=t["text"],
                     bordercolor=t["border"], lightcolor=t["border"], darkcolor=t["border"],
-                    insertcolor=t["text"], font=("Segoe UI", 10))
+                    insertcolor=t["text"], font=(FONT_BODY, 10))
 
         s.configure("TSeparator", background=t["border"])
 
@@ -337,7 +368,7 @@ class KodaSettings(tk.Tk):
         s.configure("TNotebook.Tab",
                     background=t["window"], foreground=t["text_dim"],
                     bordercolor=t["border"], lightcolor=t["window"], darkcolor=t["window"],
-                    padding=(12, 8), font=("Segoe UI", 10))
+                    padding=(12, 8), font=(FONT_BODY, 10))
         s.map("TNotebook.Tab",
               background=[("selected", t["content"]), ("active", t["hover"])],
               foreground=[("selected", t["text"]), ("active", t["text"])],
@@ -349,7 +380,7 @@ class KodaSettings(tk.Tk):
         s.configure("Sub.TNotebook.Tab",
                     background=t["content"], foreground=t["text_dim"],
                     bordercolor=t["border"], lightcolor=t["content"], darkcolor=t["content"],
-                    padding=(10, 6), font=("Segoe UI", 9))
+                    padding=(10, 6), font=(FONT_BODY, 9))
         s.map("Sub.TNotebook.Tab",
               background=[("selected", t["window"]), ("active", t["hover"])],
               foreground=[("selected", t["text"]), ("active", t["text"])],
@@ -359,13 +390,13 @@ class KodaSettings(tk.Tk):
         s.configure("Treeview",
                     background=t["content"], foreground=t["text"],
                     fieldbackground=t["content"], bordercolor=t["border"],
-                    font=("Segoe UI", 10))
+                    font=(FONT_BODY, 10))
         s.map("Treeview",
               background=[("selected", t["tree_sel"])],
               foreground=[("selected", t["text"])])
         s.configure("Treeview.Heading",
                     background=t["window"], foreground=t["text"],
-                    bordercolor=t["border"], font=("Segoe UI", 10, "bold"))
+                    bordercolor=t["border"], font=(FONT_BODY, 10, "bold"))
         s.map("Treeview.Heading",
               background=[("active", t["hover"])])
 
@@ -398,6 +429,13 @@ class KodaSettings(tk.Tk):
             except tk.TclError:
                 pass
 
+        # Re-tint the left-edge accent spine so it tracks the active theme.
+        if hasattr(self, "_left_spine"):
+            try:
+                self._left_spine.configure(bg=t["accent"])
+            except tk.TclError:
+                pass
+
     def _theme_toggle_label(self):
         return "\u2600 Light" if self._theme_name == "dark" else "\U0001F319 Dark"
 
@@ -416,8 +454,18 @@ class KodaSettings(tk.Tk):
     # ---------- Layout ----------
 
     def _build_ui(self):
+        # Left-edge accent spine — Ableton-style, full window height. Same
+        # visual signature as overlay.py's prompt preview, ties the surfaces
+        # together as one designed product. Accent color tracks theme.
+        self._left_spine = tk.Frame(self, bg=self._palette()["accent"], width=5)
+        self._left_spine.pack(side="left", fill="y")
+
+        # All other content packs into `main` (right of the accent bar).
+        main = ttk.Frame(self, style="Chrome.TFrame")
+        main.pack(side="left", fill="both", expand=True)
+
         # Bottom action bar — packed first so tall tabs can't push it off-screen.
-        btn_frame = ttk.Frame(self, style="Chrome.TFrame")
+        btn_frame = ttk.Frame(main, style="Chrome.TFrame")
         btn_frame.pack(side="bottom", fill="x", padx=16, pady=(8, 14))
         save_btn = RoundedButton(btn_frame, "Save", self.save_and_close,
                                  primary=True, palette=self._palette())
@@ -427,10 +475,10 @@ class KodaSettings(tk.Tk):
         cancel_btn.pack(side="right", padx=(0, 10))
         self._rounded_buttons.extend([save_btn, cancel_btn])
 
-        sep = ttk.Separator(self, orient="horizontal")
+        sep = ttk.Separator(main, orient="horizontal")
         sep.pack(side="bottom", fill="x", padx=16)
 
-        notebook = ttk.Notebook(self)
+        notebook = ttk.Notebook(main)
         notebook.pack(fill="both", expand=True, padx=16, pady=(14, 0))
 
         # Only wrap the long tabs (General, Advanced) in a scroll canvas.
@@ -459,7 +507,11 @@ class KodaSettings(tk.Tk):
         self._build_advanced_tab(adv_inner)
 
     def _section_header(self, parent, text, first=False):
-        ttk.Label(parent, text=text, style="Header.TLabel").pack(
+        # Explicit font tuple bypasses ttk style inheritance — guarantees
+        # identical rendering across canvas-wrapped tabs (General/Advanced)
+        # and direct-frame tabs (Hotkeys/Speech/Words).
+        ttk.Label(parent, text=text, style="Header.TLabel",
+                  font=(FONT_BODY, 11, "bold")).pack(
             anchor="w", pady=(0 if first else 16, 6))
 
     def _build_general_tab(self, parent):
