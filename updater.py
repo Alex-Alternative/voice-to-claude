@@ -5,17 +5,24 @@ Checks GitHub releases on startup, notifies user if a newer version is available
 
 import json
 import logging
+import re
 import threading
 import urllib.request
 import urllib.error
 import webbrowser
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 logger = logging.getLogger("koda")
 
 GITHUB_REPO = "Moonhawk80/koda"
-RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+# We list ALL releases and filter ourselves rather than calling /releases/latest,
+# because that endpoint just returns the most-recently-created non-pre-release —
+# which breaks the moment we publish a non-version release (e.g. model assets).
+RELEASES_LIST_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=30"
 RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
+
+# Tag must look like a semver release: optional 'v', then N.N.N, optional pre-release suffix.
+_VERSION_TAG_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:[-.][A-Za-z0-9.-]+)?$")
 
 
 def check_for_update(current_version, callback=None):
@@ -55,34 +62,50 @@ def _check_update_worker(current_version, callback):
 
 
 def _fetch_latest_release():
-    """Fetch the latest release info from GitHub API.
+    """List GitHub releases, filter to semver-shaped Koda version tags,
+    return the highest version's (version_string, download_url).
 
-    Returns:
-        (version_string, download_url) or (None, None) on failure.
+    Skips drafts, pre-releases, and any release whose tag doesn't match a
+    semver pattern (e.g. asset-only tags like 'whisper-models-v1'). Falls
+    back to (None, None) on any failure — auto-update is best-effort.
     """
     req = urllib.request.Request(
-        RELEASES_API,
+        RELEASES_LIST_API,
         headers={
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "Koda-Voice-App",
         },
     )
     with urllib.request.urlopen(req, timeout=10) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+        releases = json.loads(resp.read().decode("utf-8"))
 
-    tag = data.get("tag_name", "")
-    # Strip leading 'v' if present (e.g. "v4.2.0" -> "4.2.0")
-    version = tag.lstrip("v")
+    candidates = []
+    for release in releases:
+        if release.get("draft") or release.get("prerelease"):
+            continue
+        tag = release.get("tag_name", "")
+        if not _VERSION_TAG_RE.match(tag):
+            continue
+        try:
+            version = Version(tag.lstrip("v"))
+        except InvalidVersion:
+            continue
+        candidates.append((version, release))
 
-    # Find installer asset URL, fall back to release page
+    if not candidates:
+        return None, None
+
+    candidates.sort(key=lambda pair: pair[0], reverse=True)
+    top_version, top_release = candidates[0]
+
     download_url = RELEASES_PAGE
-    for asset in data.get("assets", []):
+    for asset in top_release.get("assets", []):
         name = asset.get("name", "")
         if name.startswith("KodaSetup") and name.endswith(".exe"):
             download_url = asset.get("browser_download_url", RELEASES_PAGE)
             break
 
-    return version, download_url
+    return str(top_version), download_url
 
 
 def _is_newer(latest, current):
