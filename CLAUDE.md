@@ -14,12 +14,12 @@ Push-to-talk voice-to-text Windows system tray app. Personal productivity tool f
 
 ## Tech Stack
 - Python 3.14, venv at `C:\Users\alexi\Projects\koda\venv`
-- No NVIDIA GPU — Intel UHD 770 only. CUDA not available.
+- Hardware varies per dev machine — run `venv/Scripts/python system_check.py` (or `Koda.exe --detect-hardware --json`) for the authoritative classification. Home PC: i7-13650HX / 20 cores / 15.7GB / RTX 4060 Laptop + CUDA usable / **POWER tier**.
 - test_stress.py runs standalone only (not via pytest normally)
 
 ## Known Issues / Environment Quirks
 - `configure.py` fails with UnicodeEncodeError in bash (cp1252 console) — cosmetic only, config.json already present
-- GPU Power Mode feature built but untestable on this machine
+- GPU Power Mode is testable on any POWER-tier machine. Trust `system_check.classify()` over any hardcoded assumption in this file.
 
 ## Current Status
 See memory file for session-by-session state: `C:\Users\alexi\.claude\projects\C--Users-alexi\memory\project_koda.md`
