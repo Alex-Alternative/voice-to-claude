@@ -411,39 +411,46 @@ begin
                  CloseQuoteIdx - 1);
 end;
 
-{ Build the tier-aware config.json string. Tier dictates cpu_threads and
-  process_priority; ModelSize is decided by the caller (POWER/MINIMUM
-  override the wizard pick, RECOMMENDED honors it). BalloonShown is
-  'true' when the wizard already celebrated Power Mode (so the runtime
-  GPU-appeared balloon never double-fires) and 'false' otherwise. }
+{ Build the tier-aware config.json string. Tier dictates cpu_threads,
+  process_priority, AND compute_type (POWER => float16 so ctranslate2
+  loads on CUDA — omitting it left the field blank, the Python loader
+  defaulted to int8, and Power Mode silently ran on CPU at 5+ sec/word).
+  ModelSize is decided by the caller (POWER/MINIMUM override the wizard
+  pick, RECOMMENDED honors it). BalloonShown is 'true' when the wizard
+  already celebrated Power Mode (so the runtime GPU-appeared balloon
+  never double-fires) and 'false' otherwise. }
 function BuildTierAwareConfigJson(
   const Tier, HotkeyMode, ModelSize, FormulaEnabled, BalloonShown: String
 ): String;
 var
-  CpuThreads, ProcessPriority: String;
+  CpuThreads, ProcessPriority, ComputeType: String;
 begin
   { PascalScript `case` does not support String selectors — use if/elseif. }
   if Tier = 'POWER' then
   begin
     CpuThreads := '4';
     ProcessPriority := 'above_normal';
+    ComputeType := 'float16';
   end
   else if Tier = 'MINIMUM' then
   begin
     CpuThreads := '2';
     ProcessPriority := 'normal';
+    ComputeType := 'int8';
   end
   else
   begin
     { RECOMMENDED or fallback }
     CpuThreads := '4';
     ProcessPriority := 'above_normal';
+    ComputeType := 'int8';
   end;
 
   Result :=
     '{' + #13#10 +
     '  "hotkey_mode": "' + HotkeyMode + '",' + #13#10 +
     '  "model_size": "' + ModelSize + '",' + #13#10 +
+    '  "compute_type": "' + ComputeType + '",' + #13#10 +
     '  "cpu_threads": ' + CpuThreads + ',' + #13#10 +
     '  "process_priority": "' + ProcessPriority + '",' + #13#10 +
     '  "system_check_tier": "' + Tier + '",' + #13#10 +
