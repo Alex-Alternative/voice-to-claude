@@ -2123,6 +2123,12 @@ def _refresh_tier_on_startup(config) -> str:
     NVIDIA GPU jumps them from RECOMMENDED to POWER. Manual override modes
     are left alone; detection failure is non-fatal.
 
+    Always sync the four tier-bound fields (model_size, compute_type,
+    cpu_threads, process_priority) against the tier defaults — not just
+    when the tier changes. This catches version drift (e.g. an older
+    installer that didn't write compute_type, leaving POWER tier silently
+    on int8/CPU) and corrects it on next startup.
+
     Returns the tier that was stored before this refresh ran. Callers like
     _maybe_show_power_unlock_balloon use that snapshot to detect transitions
     that this function would otherwise silently absorb.
@@ -2136,12 +2142,17 @@ def _refresh_tier_on_startup(config) -> str:
     except Exception:
         return old_tier
     new_tier = result.get("tier")
+    defaults = result.get("defaults", {})
+
+    changed = False
     if new_tier and new_tier != old_tier:
         config["system_check_tier"] = new_tier
-        defaults = result.get("defaults", {})
-        for key in ("model_size", "cpu_threads", "process_priority"):
-            if key in defaults:
-                config[key] = defaults[key]
+        changed = True
+    for key in ("model_size", "compute_type", "cpu_threads", "process_priority"):
+        if key in defaults and config.get(key) != defaults[key]:
+            config[key] = defaults[key]
+            changed = True
+    if changed:
         save_config(config)
     return old_tier
 

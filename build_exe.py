@@ -95,6 +95,12 @@ args = [
     "--hidden-import=pyttsx3.drivers",
     "--hidden-import=pyttsx3.drivers.sapi5",
     "--hidden-import=multiprocessing.popen_spawn_win32",
+    # Pull every binary in ctranslate2 — including cudnn64_9.dll which
+    # ctranslate2 LoadLibrary's at CUDA-init time. PyInstaller's static
+    # analyzer finds ctranslate2.dll but misses cudnn (loaded via runtime
+    # name lookup, not statically referenced), so POWER tier installs were
+    # crashing on first WhisperModel(device='cuda', compute_type='float16').
+    "--collect-binaries=ctranslate2",
     # Exclude heavy optional dependencies not needed at runtime
     # scipy/sklearn/sympy: pulled by openwakeword/noisereduce (optional features)
     # matplotlib: pulled by noisereduce (optional)
