@@ -226,7 +226,12 @@ def _default_paste(text: str) -> None:
         logger.error("Paste failed: %s", e, exc_info=True)
 
 
-def _default_record_confirm_voice(config, *, cancel_event=None, max_seconds=6.0):
+def _default_record_confirm_voice(
+    config: dict,
+    *,
+    cancel_event: threading.Event | None = None,
+    max_seconds: float = 6.0,
+):
     """Voice-confirm listener's recorder. Fast no-op when audio is unavailable
     so tests that don't inject a fake don't pay any real cost."""
     try:
