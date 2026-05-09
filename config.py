@@ -4,8 +4,11 @@ Loads/saves config.json with sensible defaults.
 """
 
 import json
+import logging
 import os
 import sys
+
+logger = logging.getLogger("koda")
 
 
 def _resolve_config_dir():
@@ -138,7 +141,11 @@ def load_config():
                 )
                 merged["system_check_mode"] = "custom" if user_customised else "auto-detect"
                 save_config(merged)
-            except Exception:
+            except Exception as e:
+                logger.warning(
+                    "First-launch hardware detect failed; defaulting to RECOMMENDED: %s",
+                    e, exc_info=True,
+                )
                 merged.setdefault("system_check_tier", "RECOMMENDED")
                 merged.setdefault("system_check_mode", "auto-detect")
 
