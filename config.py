@@ -153,12 +153,6 @@ def save_config(config):
         json.dump(config, f, indent=2)
 
 
-def open_config_file():
-    if not os.path.exists(CONFIG_PATH):
-        save_config(DEFAULT_CONFIG)
-    os.startfile(CONFIG_PATH)
-
-
 CUSTOM_WORDS_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "custom_words.json"
 )
