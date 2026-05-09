@@ -46,7 +46,14 @@ def delete_api_key(provider: str) -> bool:
         return False
     try:
         import keyring
-        keyring.delete_password(SERVICE_NAME, provider)
-        return True
-    except Exception:
-        return True  # treat missing as success
+        try:
+            keyring.delete_password(SERVICE_NAME, provider)
+            return True
+        except keyring.errors.PasswordDeleteError:
+            return True  # already absent — documented "not found" path
+    except ImportError:
+        logger.error("keyring package unavailable for delete_api_key(%s)", provider)
+        return False
+    except Exception as e:
+        logger.error("delete_api_key(%s) failed: %s", provider, e, exc_info=True)
+        return False
