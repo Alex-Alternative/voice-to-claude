@@ -2139,7 +2139,11 @@ def _refresh_tier_on_startup(config) -> str:
     try:
         from system_check import classify
         result = classify()
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            "Hardware re-detect failed; keeping stored tier %s: %s",
+            old_tier, e, exc_info=True,
+        )
         return old_tier
     new_tier = result.get("tier")
     defaults = result.get("defaults", {})
