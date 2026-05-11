@@ -15,8 +15,8 @@
 #include "thresholds.iss"
 
 #define MyAppName "Koda"
-#define MyAppVersion "4.4.0-beta1"
-#define MyAppVersionNumeric "4.4.0.1"
+#define MyAppVersion "4.4.0"
+#define MyAppVersionNumeric "4.4.0.0"
 #define MyAppPublisher "Alex Concepcion"
 #define MyAppURL "https://github.com/Moonhawk80/koda"
 #define MyAppExeName "Koda.exe"
